@@ -79,9 +79,9 @@ export const useSshStore = create<SshStore>((set, get) => ({
       host: preset.host,
       port: preset.port,
       username: preset.username,
-      authMethod: preset.auth_method,
+      auth_method: preset.auth_method,
       password: password ?? null,
-      privateKeyPath: preset.private_key_path ?? null,
+      private_key_path: preset.private_key_path ?? null,
     });
 
     // Get the initial leaf pane ID from pane-store (lazily creates tree for sessionId)
@@ -250,9 +250,9 @@ export const useSshStore = create<SshStore>((set, get) => ({
       host: preset.host,
       port: preset.port,
       username: preset.username,
-      authMethod: preset.auth_method,
+      auth_method: preset.auth_method,
       password: conn.password ?? null,
-      privateKeyPath: preset.private_key_path ?? null,
+      private_key_path: preset.private_key_path ?? null,
     };
   },
 

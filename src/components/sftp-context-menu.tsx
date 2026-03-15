@@ -93,8 +93,8 @@ export function SftpContextMenu({
     try {
       await invoke("sftp_rename", {
         ...credentials,
-        oldPath: entry.path,
-        newPath: `${parentDir}${newName.trim()}`,
+        old_path: entry.path,
+        new_path: `${parentDir}${newName.trim()}`,
       });
       onRefresh();
     } catch (e) {
@@ -110,8 +110,8 @@ export function SftpContextMenu({
     try {
       await invoke("sftp_copy", {
         ...credentials,
-        srcPath: entry.path,
-        dstPath: dst.trim(),
+        src_path: entry.path,
+        dst_path: dst.trim(),
       });
       onRefresh();
     } catch (e) {
@@ -148,8 +148,8 @@ export function SftpContextMenu({
     try {
       await invoke("sftp_download", {
         ...credentials,
-        remotePath: entry.path,
-        localPath,
+        remote_path: entry.path,
+        local_path: localPath,
       });
     } catch (e) {
       alert(`Download failed: ${e}`);
@@ -164,7 +164,7 @@ export function SftpContextMenu({
       await invoke("sftp_delete", {
         ...credentials,
         path: entry.path,
-        isDir: entry.is_dir,
+        is_dir: entry.is_dir,
       });
       onRefresh();
     } catch (e) {

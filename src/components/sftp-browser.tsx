@@ -48,7 +48,7 @@ export function SftpBrowser({ sessionId }: SftpBrowserProps) {
 
     try {
       setOpError(null);
-      await invoke("sftp_upload", { ...creds, localPath: filePath as string, remotePath });
+      await invoke("sftp_upload", { ...creds, local_path: filePath as string, remote_path: remotePath });
       handleRefresh();
     } catch (err) {
       setOpError(`Upload failed: ${err}`);
@@ -113,7 +113,7 @@ export function SftpBrowser({ sessionId }: SftpBrowserProps) {
 
       try {
         setOpError(null);
-        await invoke("sftp_download", { ...creds, remotePath, localPath });
+        await invoke("sftp_download", { ...creds, remote_path: remotePath, local_path: localPath });
       } catch (err) {
         setOpError(`Download failed: ${err}`);
       }
@@ -126,7 +126,7 @@ export function SftpBrowser({ sessionId }: SftpBrowserProps) {
       if (!creds) return;
       try {
         setOpError(null);
-        await invoke("sftp_delete", { ...creds, path, isDir });
+        await invoke("sftp_delete", { ...creds, path, is_dir: isDir });
         handleRefresh();
       } catch (err) {
         setOpError(`Delete failed: ${err}`);
@@ -151,8 +151,8 @@ export function SftpBrowser({ sessionId }: SftpBrowserProps) {
         host: creds.host as string,
         port: creds.port as number,
         username: creds.username as string,
-        auth_method: creds.authMethod as string,
-        private_key_path: creds.privateKeyPath as string | undefined,
+        auth_method: creds.auth_method as string,
+        private_key_path: creds.private_key_path as string | undefined,
       }
     : null;
 
