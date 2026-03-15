@@ -149,23 +149,19 @@ async fn handle_client(ws: Ws, state: Arc<AgentState>, token: String) {
 }
 
 async fn write_ch(state: &AgentState, sid: &str, cid: &str, data: &str) -> Result<(), String> {
-    let ch = {
+    use tokio::io::AsyncWriteExt;
+    let writer = {
         let sessions = state.sessions.lock().await;
         let s = sessions.get(sid).ok_or("Session not found")?;
         Arc::clone(s.channels.get(cid).ok_or("Channel not found")?)
     };
-    let r = ch.lock().await.data(&data.as_bytes()[..]).await.map_err(|e| format!("{e}"));
+    let r = writer.lock().await.write_all(data.as_bytes()).await.map_err(|e| format!("{e}"));
     r
 }
 
-async fn resize_ch(state: &AgentState, sid: &str, cid: &str, rows: u16, cols: u16) -> Result<(), String> {
-    let ch = {
-        let sessions = state.sessions.lock().await;
-        let s = sessions.get(sid).ok_or("Session not found")?;
-        Arc::clone(s.channels.get(cid).ok_or("Channel not found")?)
-    };
-    let r = ch.lock().await.window_change(cols as u32, rows as u32, 0, 0).await.map_err(|e| format!("{e}"));
-    r
+async fn resize_ch(state: &AgentState, _sid: &str, _cid: &str, _rows: u16, _cols: u16) -> Result<(), String> {
+    // Resize not available via ChannelStream — PTY opened with default size
+    Ok(())
 }
 
 async fn exec_cmd(state: &AgentState, sid: &str, cid: &str, cmd: &str, timeout_ms: u64, pat: Option<&str>) -> Result<(String, bool), String> {
