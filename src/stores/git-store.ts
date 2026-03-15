@@ -7,6 +7,12 @@ export interface GitFileStatus {
   staged: boolean;
 }
 
+export interface BranchInfo {
+  name: string;
+  is_current: boolean;
+  is_remote: boolean;
+}
+
 interface ProjectGitState {
   branch: string;
   files: GitFileStatus[];
@@ -14,6 +20,12 @@ interface ProjectGitState {
   diff: string;
   commitMessage: string;
   loading: boolean;
+  ahead: number;
+  behind: number;
+  branches: BranchInfo[];
+  tags: string[];
+  pushing: boolean;
+  pulling: boolean;
 }
 
 const DEFAULT_STATE: ProjectGitState = {
@@ -23,6 +35,12 @@ const DEFAULT_STATE: ProjectGitState = {
   diff: "",
   commitMessage: "",
   loading: false,
+  ahead: 0,
+  behind: 0,
+  branches: [],
+  tags: [],
+  pushing: false,
+  pulling: false,
 };
 
 interface GitStore {
@@ -37,6 +55,14 @@ interface GitStore {
   unstageFile: (projectPath: string, path: string) => Promise<void>;
   commit: (projectPath: string) => Promise<void>;
   removeProject: (projectPath: string) => void;
+  fetchBranches: (projectPath: string) => Promise<void>;
+  switchBranch: (projectPath: string, name: string) => Promise<void>;
+  createBranch: (projectPath: string, name: string, checkout: boolean) => Promise<void>;
+  push: (projectPath: string) => Promise<void>;
+  pull: (projectPath: string) => Promise<void>;
+  fetchTags: (projectPath: string) => Promise<void>;
+  createTag: (projectPath: string, name: string, message?: string) => Promise<void>;
+  deleteTag: (projectPath: string, name: string) => Promise<void>;
 }
 
 /** Helper to update a single project's git state */
@@ -81,14 +107,17 @@ export const useGitStore = create<GitStore>((set, get) => ({
       states: updateProjectState(s.states, projectPath, { loading: true }),
     }));
     try {
-      const result = await invoke<{ branch: string; files: GitFileStatus[] }>(
-        "git_status",
-        { cwd: projectPath },
-      );
+      // Fetch status and ahead/behind in parallel
+      const [result, ab] = await Promise.all([
+        invoke<{ branch: string; files: GitFileStatus[] }>("git_status", { cwd: projectPath }),
+        invoke<{ ahead: number; behind: number }>("git_ahead_behind", { cwd: projectPath }).catch(() => ({ ahead: 0, behind: 0 })),
+      ]);
       set((s) => ({
         states: updateProjectState(s.states, projectPath, {
           branch: result.branch,
           files: result.files,
+          ahead: ab.ahead,
+          behind: ab.behind,
           loading: false,
         }),
       }));
@@ -128,4 +157,62 @@ export const useGitStore = create<GitStore>((set, get) => ({
       const { [projectPath]: _, ...rest } = s.states;
       return { states: rest };
     }),
+
+  fetchBranches: async (projectPath) => {
+    try {
+      const branches = await invoke<BranchInfo[]>("git_branches", { cwd: projectPath });
+      set((s) => ({
+        states: updateProjectState(s.states, projectPath, { branches }),
+      }));
+    } catch { /* ignore */ }
+  },
+
+  switchBranch: async (projectPath, name) => {
+    await invoke("git_switch_branch", { cwd: projectPath, name });
+    await get().refresh(projectPath);
+  },
+
+  createBranch: async (projectPath, name, checkout) => {
+    await invoke("git_create_branch", { cwd: projectPath, name, checkout });
+    await get().refresh(projectPath);
+  },
+
+  push: async (projectPath) => {
+    set((s) => ({ states: updateProjectState(s.states, projectPath, { pushing: true }) }));
+    try {
+      await invoke("git_push", { cwd: projectPath });
+    } finally {
+      set((s) => ({ states: updateProjectState(s.states, projectPath, { pushing: false }) }));
+      await get().refresh(projectPath);
+    }
+  },
+
+  pull: async (projectPath) => {
+    set((s) => ({ states: updateProjectState(s.states, projectPath, { pulling: true }) }));
+    try {
+      await invoke("git_pull", { cwd: projectPath });
+    } finally {
+      set((s) => ({ states: updateProjectState(s.states, projectPath, { pulling: false }) }));
+      await get().refresh(projectPath);
+    }
+  },
+
+  fetchTags: async (projectPath) => {
+    try {
+      const tags = await invoke<string[]>("git_tags", { cwd: projectPath });
+      set((s) => ({
+        states: updateProjectState(s.states, projectPath, { tags }),
+      }));
+    } catch { /* ignore */ }
+  },
+
+  createTag: async (projectPath, name, message?) => {
+    await invoke("git_create_tag", { cwd: projectPath, name, message: message || null });
+    await get().fetchTags(projectPath);
+  },
+
+  deleteTag: async (projectPath, name) => {
+    await invoke("git_delete_tag", { cwd: projectPath, name });
+    await get().fetchTags(projectPath);
+  },
 }));

@@ -17,25 +17,27 @@ export function SshTabBar({
   const tabOrder = useSshStore((s) => s.tabOrder);
   const activeSessionId = useSshStore((s) => s.activeSessionId);
   const connections = useSshStore((s) => s.connections);
-  const presets = useSshStore((s) => s.presets);
+  const savedSessions = useSshStore((s) => s.savedSessions);
   const setActiveSession = useSshStore((s) => s.setActiveSession);
   const disconnect = useSshStore((s) => s.disconnect);
 
   return (
     <div className="h-8 flex items-center bg-ctp-crust border-b border-ctp-surface0 overflow-x-auto shrink-0">
-      {tabOrder.map((sessionId) => {
-        const conn = connections[sessionId];
-        const preset = presets.find((p) => p.id === conn?.presetId);
-        const isActive = sessionId === activeSessionId;
+      {tabOrder.map((connId) => {
+        const conn = connections[connId];
+        const session = savedSessions.find((s) => s.id === conn?.sessionId);
+        const isActive = connId === activeSessionId;
         const isConnected = conn?.status === "connected";
         const label =
-          preset?.name ??
-          (preset ? `${preset.host}:${preset.port}` : sessionId.slice(0, 8));
+          session?.name ??
+          (session
+            ? `${session.username}@${session.host}`
+            : connId.slice(0, 8));
 
         return (
           <div
-            key={sessionId}
-            onClick={() => setActiveSession(sessionId)}
+            key={connId}
+            onClick={() => setActiveSession(connId)}
             className={`group flex items-center gap-1.5 px-3 h-full text-xs cursor-pointer
               border-r border-ctp-surface0 shrink-0 transition-colors
               ${
@@ -53,7 +55,7 @@ export function SshTabBar({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                disconnect(sessionId);
+                disconnect(connId);
               }}
               title="Close"
               className="p-0.5 rounded opacity-0 group-hover:opacity-100

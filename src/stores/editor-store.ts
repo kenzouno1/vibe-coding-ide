@@ -14,6 +14,7 @@ interface ProjectEditorState {
   openFiles: EditorFileTab[];
   activeFilePath: string | null;
   viewStates: Record<string, unknown>;
+  previewModes: Record<string, boolean>;
   explorerWidth: number;
   cursorLine: number;
   cursorCol: number;
@@ -23,6 +24,7 @@ const DEFAULT_STATE: ProjectEditorState = {
   openFiles: [],
   activeFilePath: null,
   viewStates: {},
+  previewModes: {},
   explorerWidth: 250,
   cursorLine: 1,
   cursorCol: 1,
@@ -39,6 +41,8 @@ interface EditorStore {
   saveViewState: (projectPath: string, filePath: string, viewState: unknown) => void;
   setExplorerWidth: (projectPath: string, width: number) => void;
   setCursorPosition: (projectPath: string, line: number, col: number) => void;
+  updateContent: (projectPath: string, filePath: string, content: string) => void;
+  togglePreview: (projectPath: string, filePath: string) => void;
   removeProject: (projectPath: string) => void;
 }
 
@@ -78,6 +82,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       const language = detectLanguage(filePath);
 
       const newTab: EditorFileTab = { filePath, displayName, content, isDirty: false, language };
+      const isMarkdown = language === "markdown";
 
       set((s) => {
         const current = s.states[projectPath] || DEFAULT_STATE;
@@ -85,6 +90,9 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
           states: updateProjectState(s.states, projectPath, {
             openFiles: [...current.openFiles, newTab],
             activeFilePath: filePath,
+            previewModes: isMarkdown
+              ? { ...current.previewModes, [filePath]: true }
+              : current.previewModes,
           }),
         };
       });
@@ -105,14 +113,16 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         newActive = newFiles[Math.min(idx, newFiles.length - 1)]?.filePath ?? null;
       }
 
-      // Clean up view state for closed file
+      // Clean up view state and preview mode for closed file
       const { [filePath]: _, ...remainingViewStates } = current.viewStates;
+      const { [filePath]: __, ...remainingPreviewModes } = current.previewModes;
 
       return {
         states: updateProjectState(s.states, projectPath, {
           openFiles: newFiles,
           activeFilePath: newActive,
           viewStates: remainingViewStates,
+          previewModes: remainingPreviewModes,
         }),
       };
     });
@@ -172,6 +182,36 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     set((s) => ({
       states: updateProjectState(s.states, projectPath, { cursorLine: line, cursorCol: col }),
     })),
+
+  updateContent: (projectPath, filePath, content) =>
+    set((s) => {
+      const current = s.states[projectPath] || DEFAULT_STATE;
+      return {
+        states: updateProjectState(s.states, projectPath, {
+          openFiles: current.openFiles.map((f) =>
+            f.filePath === filePath ? { ...f, content } : f,
+          ),
+        }),
+      };
+    }),
+
+  togglePreview: (projectPath, filePath) => {
+    // Dispatch event so EditorPane can sync Monaco buffer to store before toggle
+    window.dispatchEvent(new CustomEvent("devtools:sync-editor-content"));
+
+    // Use setTimeout(0) to let the sync event handler run first
+    setTimeout(() => {
+      set((s) => {
+        const current = s.states[projectPath] || DEFAULT_STATE;
+        const currentMode = current.previewModes[filePath] ?? false;
+        return {
+          states: updateProjectState(s.states, projectPath, {
+            previewModes: { ...current.previewModes, [filePath]: !currentMode },
+          }),
+        };
+      });
+    }, 0);
+  },
 
   removeProject: (projectPath) =>
     set((s) => {

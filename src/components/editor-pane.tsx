@@ -148,6 +148,21 @@ export function EditorPane({ projectPath }: EditorPaneProps) {
     return () => window.removeEventListener("devtools:save-active-file", handleSave);
   }, [saveActiveFile]);
 
+  // Sync Monaco buffer content to store (for markdown preview to read latest edits)
+  useEffect(() => {
+    const handleSync = () => {
+      const editor = editorRef.current;
+      const activePath = useEditorStore.getState().getState(projectPath).activeFilePath;
+      if (!editor || !activePath) return;
+      const model = editor.getModel();
+      if (model) {
+        useEditorStore.getState().updateContent(projectPath, activePath, model.getValue());
+      }
+    };
+    window.addEventListener("devtools:sync-editor-content", handleSync);
+    return () => window.removeEventListener("devtools:sync-editor-content", handleSync);
+  }, [projectPath]);
+
   // Cleanup all models on unmount
   useEffect(() => {
     return () => {

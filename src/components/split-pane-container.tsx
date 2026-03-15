@@ -1,50 +1,124 @@
-import { usePaneStore } from "@/stores/pane-store";
+import { useRef, useLayoutEffect, memo } from "react";
+import { createPortal } from "react-dom";
+import { usePaneStore, collectLeafIds } from "@/stores/pane-store";
 import type { PaneNode } from "@/stores/pane-store";
 import { SplitHandle } from "@/components/split-handle";
 import { TerminalPane } from "@/components/terminal-pane";
 
-interface SplitPaneContainerProps {
-  projectPath: string;
-  /** Internal: override node for recursive rendering */
-  node?: PaneNode;
-}
+/**
+ * Leaf slot — mounts a stable container element into the layout.
+ * Uses useLayoutEffect to reparent before paint, preventing flicker.
+ */
+const LeafSlot = memo(function LeafSlot({
+  container,
+}: {
+  container: HTMLDivElement;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
 
-export function SplitPaneContainer({ projectPath, node }: SplitPaneContainerProps) {
-  const getTree = usePaneStore((s) => s.getTree);
-  const getActiveId = usePaneStore((s) => s.getActiveId);
-  const setActive = usePaneStore((s) => s.setActive);
+  useLayoutEffect(() => {
+    if (ref.current && container.parentElement !== ref.current) {
+      ref.current.appendChild(container);
+    }
+  });
+
+  return <div ref={ref} className="h-full w-full" />;
+});
+
+/** Recursive layout renderer — only renders split structure, no terminals */
+function TreeLayout({
+  node,
+  projectPath,
+  containers,
+}: {
+  node: PaneNode;
+  projectPath: string;
+  containers: Map<string, HTMLDivElement>;
+}) {
   const setRatio = usePaneStore((s) => s.setRatio);
 
-  const resolvedNode = node ?? getTree(projectPath);
-  const activeId = getActiveId(projectPath);
-
-  if (resolvedNode.type === "leaf") {
-    return (
-      <TerminalPane
-        projectPath={projectPath}
-        paneId={resolvedNode.id}
-        isActive={resolvedNode.id === activeId}
-        onFocus={() => setActive(projectPath, resolvedNode.id)}
-      />
-    );
+  if (node.type === "leaf") {
+    const container = containers.get(node.id);
+    if (!container) return null;
+    return <LeafSlot container={container} />;
   }
 
-  const isHorizontal = resolvedNode.direction === "horizontal";
-  const firstPercent = `${resolvedNode.ratio * 100}%`;
-  const secondPercent = `${(1 - resolvedNode.ratio) * 100}%`;
+  const isHorizontal = node.direction === "horizontal";
+  const firstPercent = `${node.ratio * 100}%`;
+  const secondPercent = `${(1 - node.ratio) * 100}%`;
 
   return (
     <div className={`flex h-full w-full ${isHorizontal ? "flex-row" : "flex-col"}`}>
       <div style={{ flexBasis: firstPercent }} className="min-w-0 min-h-0 overflow-hidden">
-        <SplitPaneContainer projectPath={projectPath} node={resolvedNode.first} />
+        <TreeLayout node={node.first} projectPath={projectPath} containers={containers} />
       </div>
       <SplitHandle
-        direction={resolvedNode.direction}
-        onResize={(ratio) => setRatio(projectPath, resolvedNode.id, ratio)}
+        direction={node.direction}
+        onResize={(ratio) => setRatio(projectPath, node.id, ratio)}
       />
       <div style={{ flexBasis: secondPercent }} className="min-w-0 min-h-0 overflow-hidden">
-        <SplitPaneContainer projectPath={projectPath} node={resolvedNode.second} />
+        <TreeLayout node={node.second} projectPath={projectPath} containers={containers} />
       </div>
     </div>
+  );
+}
+
+interface SplitPaneContainerProps {
+  projectPath: string;
+}
+
+/**
+ * Split pane container with portal-based terminal rendering.
+ *
+ * Terminals are rendered via portals into stable container elements that
+ * persist across tree restructures. This prevents React from unmounting
+ * and remounting TerminalPane components (which would kill PTY sessions)
+ * when the pane tree changes (e.g., during splits).
+ */
+export function SplitPaneContainer({ projectPath }: SplitPaneContainerProps) {
+  const tree = usePaneStore((s) => s.getTree(projectPath));
+  const activeId = usePaneStore((s) => s.getActiveId(projectPath));
+  const setActive = usePaneStore((s) => s.setActive);
+
+  const leafIds = collectLeafIds(tree);
+
+  // Stable container elements — persist across tree restructures
+  const containersRef = useRef(new Map<string, HTMLDivElement>());
+
+  // Ensure containers exist for current leaves
+  for (const id of leafIds) {
+    if (!containersRef.current.has(id)) {
+      const el = document.createElement("div");
+      el.style.width = "100%";
+      el.style.height = "100%";
+      el.style.overflow = "hidden";
+      containersRef.current.set(id, el);
+    }
+  }
+
+  // Remove containers for closed panes
+  for (const [id] of containersRef.current) {
+    if (!leafIds.includes(id)) {
+      containersRef.current.delete(id);
+    }
+  }
+
+  return (
+    <>
+      <TreeLayout node={tree} projectPath={projectPath} containers={containersRef.current} />
+      {leafIds.map((id) => {
+        const container = containersRef.current.get(id)!;
+        return createPortal(
+          <TerminalPane
+            key={id}
+            projectPath={projectPath}
+            paneId={id}
+            isActive={id === activeId}
+            onFocus={() => setActive(projectPath, id)}
+          />,
+          container,
+        );
+      })}
+    </>
   );
 }

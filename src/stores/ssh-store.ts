@@ -1,10 +1,15 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import type { SshPreset, SftpEntry, ConnectionStatus } from "./ssh-types";
+import type {
+  SshPreset,
+  SshSavedSession,
+  SftpEntry,
+  ConnectionStatus,
+} from "./ssh-types";
 import { usePaneStore } from "@/stores/pane-store";
 
 interface SshConnection {
-  presetId: string;
+  sessionId: string; // saved session id
   status: ConnectionStatus;
   password?: string; // cached in memory for SFTP reuse, never persisted
   error?: string;
@@ -18,29 +23,37 @@ interface SshConnection {
 }
 
 interface SshStore {
-  // Presets
+  // Presets (templates)
   presets: SshPreset[];
   loadPresets: () => Promise<void>;
   savePreset: (preset: SshPreset) => Promise<void>;
   deletePreset: (id: string) => Promise<void>;
 
-  // Connections
+  // Saved sessions (persisted server profiles)
+  savedSessions: SshSavedSession[];
+  loadSavedSessions: () => Promise<void>;
+  saveSavedSession: (session: SshSavedSession) => Promise<void>;
+  deleteSavedSession: (id: string) => Promise<void>;
+
+  // Active connections
   connections: Record<string, SshConnection>;
   activeSessionId: string | null;
-  tabOrder: string[]; // ordered list of session IDs
+  tabOrder: string[]; // ordered list of active connection IDs
   setActiveSession: (id: string | null) => void;
-  connect: (preset: SshPreset, password?: string) => Promise<string>;
-  disconnect: (sessionId: string) => Promise<void>;
-  openChannel: (sessionId: string, paneId: string) => Promise<void>;
-  closeChannel: (sessionId: string, paneId: string) => Promise<void>;
+  connect: (session: SshSavedSession, password?: string) => Promise<string>;
+  disconnect: (connId: string) => Promise<void>;
+  openChannel: (connId: string, paneId: string) => Promise<void>;
+  closeChannel: (connId: string, paneId: string) => Promise<void>;
 
   // SFTP
-  browsePath: (sessionId: string, path: string) => Promise<void>;
+  browsePath: (connId: string, path: string) => Promise<void>;
 
   // Helpers
-  getActivePreset: () => SshPreset | undefined;
-  getActiveSftpCredentials: (sessionId?: string) => Record<string, unknown> | null;
-  getSessionSftp: (sessionId: string) => {
+  getActiveSavedSession: () => SshSavedSession | undefined;
+  getActiveSftpCredentials: (
+    connId?: string,
+  ) => Record<string, unknown> | null;
+  getSessionSftp: (connId: string) => {
     sftpPath: string;
     sftpEntries: SftpEntry[];
     sftpLoading: boolean;
@@ -49,7 +62,7 @@ interface SshStore {
 }
 
 export const useSshStore = create<SshStore>((set, get) => ({
-  // Presets
+  // ── Presets ──────────────────────────────────────────────────────────
   presets: [],
   loadPresets: async () => {
     try {
@@ -68,30 +81,48 @@ export const useSshStore = create<SshStore>((set, get) => ({
     await get().loadPresets();
   },
 
-  // Connections
+  // ── Saved Sessions ──────────────────────────────────────────────────
+  savedSessions: [],
+  loadSavedSessions: async () => {
+    try {
+      const sessions = await invoke<SshSavedSession[]>("ssh_session_list");
+      set({ savedSessions: sessions });
+    } catch (e) {
+      console.error("Failed to load SSH sessions:", e);
+    }
+  },
+  saveSavedSession: async (session) => {
+    await invoke("ssh_session_save", { session });
+    await get().loadSavedSessions();
+  },
+  deleteSavedSession: async (id) => {
+    await invoke("ssh_session_delete", { id });
+    await get().loadSavedSessions();
+  },
+
+  // ── Active Connections ──────────────────────────────────────────────
   connections: {},
   activeSessionId: null,
   tabOrder: [],
   setActiveSession: (id) => set({ activeSessionId: id }),
 
-  connect: async (preset, password) => {
-    const sessionId = await invoke<string>("ssh_connect", {
-      host: preset.host,
-      port: preset.port,
-      username: preset.username,
-      authMethod: preset.auth_method,
+  connect: async (session, password) => {
+    const connId = await invoke<string>("ssh_connect", {
+      host: session.host,
+      port: session.port,
+      username: session.username,
+      authMethod: session.auth_method,
       password: password ?? null,
-      privateKeyPath: preset.private_key_path ?? null,
+      privateKeyPath: session.private_key_path ?? null,
     });
 
-    // Get the initial leaf pane ID from pane-store (lazily creates tree for sessionId)
-    const initialPaneId = usePaneStore.getState().getTree(sessionId).id;
+    const initialPaneId = usePaneStore.getState().getTree(connId).id;
 
     set((s) => ({
       connections: {
         ...s.connections,
-        [sessionId]: {
-          presetId: preset.id,
+        [connId]: {
+          sessionId: session.id,
           status: "connected",
           password,
           sftpPath: "/",
@@ -101,34 +132,33 @@ export const useSshStore = create<SshStore>((set, get) => ({
           channelMap: { [initialPaneId]: "default" },
         },
       },
-      activeSessionId: sessionId,
-      tabOrder: [...s.tabOrder, sessionId],
+      activeSessionId: connId,
+      tabOrder: [...s.tabOrder, connId],
     }));
 
-    return sessionId;
+    return connId;
   },
 
-  disconnect: async (sessionId) => {
+  disconnect: async (connId) => {
     try {
-      await invoke("ssh_disconnect", { id: sessionId });
+      await invoke("ssh_disconnect", { id: connId });
     } catch {
       // ignore disconnect errors
     }
-    // Clean up pane tree for this session
-    usePaneStore.getState().removeProject(sessionId);
+    usePaneStore.getState().removeProject(connId);
     set((s) => {
-      const { [sessionId]: _, ...rest } = s.connections;
-      const newTabOrder = s.tabOrder.filter((id) => id !== sessionId);
+      const { [connId]: _, ...rest } = s.connections;
+      const newTabOrder = s.tabOrder.filter((id) => id !== connId);
 
       let newActiveSessionId = s.activeSessionId;
-      if (s.activeSessionId === sessionId) {
+      if (s.activeSessionId === connId) {
         if (newTabOrder.length === 0) {
           newActiveSessionId = null;
         } else {
-          // Activate adjacent tab (previous or next)
-          const idx = s.tabOrder.indexOf(sessionId);
+          const idx = s.tabOrder.indexOf(connId);
           const prevIdx = idx > 0 ? idx - 1 : 0;
-          newActiveSessionId = newTabOrder[prevIdx] ?? newTabOrder[0] ?? null;
+          newActiveSessionId =
+            newTabOrder[prevIdx] ?? newTabOrder[0] ?? null;
         }
       }
 
@@ -140,16 +170,18 @@ export const useSshStore = create<SshStore>((set, get) => ({
     });
   },
 
-  openChannel: async (sessionId, paneId) => {
+  openChannel: async (connId, paneId) => {
     try {
-      const channelId = await invoke<string>("ssh_open_channel", { sessionId });
+      const channelId = await invoke<string>("ssh_open_channel", {
+        sessionId: connId,
+      });
       set((s) => {
-        const conn = s.connections[sessionId];
+        const conn = s.connections[connId];
         if (!conn) return s;
         return {
           connections: {
             ...s.connections,
-            [sessionId]: {
+            [connId]: {
               ...conn,
               channelMap: { ...conn.channelMap, [paneId]: channelId },
             },
@@ -161,39 +193,42 @@ export const useSshStore = create<SshStore>((set, get) => ({
     }
   },
 
-  closeChannel: async (sessionId, paneId) => {
-    const conn = get().connections[sessionId];
+  closeChannel: async (connId, paneId) => {
+    const conn = get().connections[connId];
     const channelId = conn?.channelMap[paneId];
     if (channelId && channelId !== "default") {
       try {
-        await invoke("ssh_close_channel", { sessionId, channelId });
+        await invoke("ssh_close_channel", {
+          sessionId: connId,
+          channelId,
+        });
       } catch (e) {
         console.error("Failed to close SSH channel:", e);
       }
     }
     set((s) => {
-      const c = s.connections[sessionId];
+      const c = s.connections[connId];
       if (!c) return s;
       const { [paneId]: _removed, ...restMap } = c.channelMap;
       return {
         connections: {
           ...s.connections,
-          [sessionId]: { ...c, channelMap: restMap },
+          [connId]: { ...c, channelMap: restMap },
         },
       };
     });
   },
 
-  // SFTP
-  browsePath: async (sessionId, path) => {
-    const creds = get().getActiveSftpCredentials(sessionId);
+  // ── SFTP ────────────────────────────────────────────────────────────
+  browsePath: async (connId, path) => {
+    const creds = get().getActiveSftpCredentials(connId);
     if (!creds) return;
 
     set((s) => ({
       connections: {
         ...s.connections,
-        [sessionId]: {
-          ...s.connections[sessionId],
+        [connId]: {
+          ...s.connections[connId],
           sftpLoading: true,
           sftpError: null,
         },
@@ -208,8 +243,8 @@ export const useSshStore = create<SshStore>((set, get) => ({
       set((s) => ({
         connections: {
           ...s.connections,
-          [sessionId]: {
-            ...s.connections[sessionId],
+          [connId]: {
+            ...s.connections[connId],
             sftpPath: path,
             sftpEntries: entries,
             sftpLoading: false,
@@ -220,8 +255,8 @@ export const useSshStore = create<SshStore>((set, get) => ({
       set((s) => ({
         connections: {
           ...s.connections,
-          [sessionId]: {
-            ...s.connections[sessionId],
+          [connId]: {
+            ...s.connections[connId],
             sftpLoading: false,
             sftpError: String(e),
           },
@@ -230,34 +265,35 @@ export const useSshStore = create<SshStore>((set, get) => ({
     }
   },
 
-  getActivePreset: () => {
-    const { activeSessionId, connections, presets } = get();
+  // ── Helpers ─────────────────────────────────────────────────────────
+  getActiveSavedSession: () => {
+    const { activeSessionId, connections, savedSessions } = get();
     if (!activeSessionId) return undefined;
     const conn = connections[activeSessionId];
     if (!conn) return undefined;
-    return presets.find((p) => p.id === conn.presetId);
+    return savedSessions.find((s) => s.id === conn.sessionId);
   },
 
-  getActiveSftpCredentials: (sessionId) => {
-    const { activeSessionId, connections, presets } = get();
-    const targetId = sessionId ?? activeSessionId;
+  getActiveSftpCredentials: (connId) => {
+    const { activeSessionId, connections, savedSessions } = get();
+    const targetId = connId ?? activeSessionId;
     if (!targetId) return null;
     const conn = connections[targetId];
     if (!conn) return null;
-    const preset = presets.find((p) => p.id === conn.presetId);
-    if (!preset) return null;
+    const session = savedSessions.find((s) => s.id === conn.sessionId);
+    if (!session) return null;
     return {
-      host: preset.host,
-      port: preset.port,
-      username: preset.username,
-      authMethod: preset.auth_method,
+      host: session.host,
+      port: session.port,
+      username: session.username,
+      authMethod: session.auth_method,
       password: conn.password ?? null,
-      privateKeyPath: preset.private_key_path ?? null,
+      privateKeyPath: session.private_key_path ?? null,
     };
   },
 
-  getSessionSftp: (sessionId) => {
-    const conn = get().connections[sessionId];
+  getSessionSftp: (connId) => {
+    const conn = get().connections[connId];
     return {
       sftpPath: conn?.sftpPath ?? "/",
       sftpEntries: conn?.sftpEntries ?? [],

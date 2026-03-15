@@ -40,7 +40,7 @@ mod platform {
             // First call: get required buffer size (in bytes)
             let size = ImmGetCompositionStringW(himc, GCS_RESULTSTR, None, 0);
             if size <= 0 {
-                ImmReleaseContext(hwnd, himc);
+                let _ = ImmReleaseContext(hwnd, himc);
                 return None;
             }
 
@@ -53,7 +53,7 @@ mod platform {
                 Some(buffer.as_mut_ptr() as *mut _),
                 size as u32,
             );
-            ImmReleaseContext(hwnd, himc);
+            let _ = ImmReleaseContext(hwnd, himc);
 
             if result <= 0 {
                 return None;

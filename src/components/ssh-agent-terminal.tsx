@@ -33,7 +33,10 @@ export const SshAgentTerminal = memo(function SshAgentTerminal() {
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(containerRef.current);
-    fitAddon.fit();
+
+    // Defer initial fit — container may not have final layout dimensions
+    // immediately after mount (flex layout still settling).
+    requestAnimationFrame(() => fitAddon.fit());
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
@@ -63,17 +66,30 @@ export const SshAgentTerminal = memo(function SshAgentTerminal() {
     });
 
     setTimeout(() => {
-      fitAddon.fit();
-      resize(term.rows, term.cols);
-      // Auto-cd to agent workspace where CLAUDE.md lives
-      // Detect OS: cmd.exe uses %USERPROFILE%, bash/zsh uses ~
-      const isWindows = navigator.platform.startsWith("Win");
-      if (isWindows) {
-        write("cd /d %USERPROFILE%\\.devtools\\agent-workspace && cls\r");
-      } else {
-        write("cd ~/.devtools/agent-workspace && clear\r");
-      }
+      requestAnimationFrame(() => {
+        fitAddon.fit();
+        resize(term.rows, term.cols);
+        // Auto-cd to agent workspace where CLAUDE.md lives
+        const isWindows = navigator.platform.startsWith("Win");
+        if (isWindows) {
+          write("cd /d %USERPROFILE%\\.devtools\\agent-workspace && cls\r");
+        } else {
+          write("cd ~/.devtools/agent-workspace && clear\r");
+        }
+      });
     }, 800);
+
+    // Re-render terminal when window regains focus (canvas content lost while hidden)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        requestAnimationFrame(() => {
+          fitAddon.fit();
+          resize(term.rows, term.cols);
+          term.refresh(0, term.rows - 1);
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     const resizeObserver = new ResizeObserver(() => {
       if (viewRef.current !== "ssh") return;
@@ -86,6 +102,7 @@ export const SshAgentTerminal = memo(function SshAgentTerminal() {
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       imeCleanup();
       resizeObserver.disconnect();
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
@@ -95,10 +112,10 @@ export const SshAgentTerminal = memo(function SshAgentTerminal() {
 
   useEffect(() => {
     if (view === "ssh" && fitAddonRef.current && termRef.current) {
-      setTimeout(() => {
+      requestAnimationFrame(() => {
         fitAddonRef.current?.fit();
         if (termRef.current) resize(termRef.current.rows, termRef.current.cols);
-      }, 50);
+      });
     }
   }, [view, resize]);
 
@@ -109,7 +126,7 @@ export const SshAgentTerminal = memo(function SshAgentTerminal() {
           AI Agent Terminal
         </span>
       </div>
-      <div ref={containerRef} className="flex-1" />
+      <div ref={containerRef} className="flex-1 min-h-0 overflow-hidden" />
     </div>
   );
 });

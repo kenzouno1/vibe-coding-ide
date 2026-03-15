@@ -2,6 +2,7 @@ import { useCallback, useRef } from "react";
 import { FileExplorer } from "@/components/file-explorer";
 import { EditorTabBar } from "@/components/editor-tab-bar";
 import { EditorPane } from "@/components/editor-pane";
+import { MarkdownPreview } from "@/components/markdown-preview";
 import { useEditorStore } from "@/stores/editor-store";
 import { File } from "lucide-react";
 
@@ -10,9 +11,9 @@ interface EditorViewProps {
 }
 
 export function EditorView({ projectPath }: EditorViewProps) {
-  const explorerWidth = useEditorStore((s) => s.getState(projectPath).explorerWidth);
+  const { explorerWidth, activeFilePath, openFiles, previewModes } = useEditorStore((s) => s.getState(projectPath));
   const setExplorerWidth = useEditorStore((s) => s.setExplorerWidth);
-  const activeFilePath = useEditorStore((s) => s.getState(projectPath).activeFilePath);
+  const activeFile = openFiles.find((f) => f.filePath === activeFilePath);
 
   const dragging = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -60,7 +61,15 @@ export function EditorView({ projectPath }: EditorViewProps) {
         {activeFilePath ? (
           <>
             <EditorTabBar projectPath={projectPath} />
-            <EditorPane projectPath={projectPath} />
+            {/* Keep EditorPane always mounted to preserve Monaco state & Ctrl+S */}
+            <div className="flex-1 flex flex-col overflow-hidden relative">
+              <div className={activeFile?.language === "markdown" && previewModes[activeFilePath] ? "hidden" : "flex-1 flex flex-col overflow-hidden"}>
+                <EditorPane projectPath={projectPath} />
+              </div>
+              {activeFile?.language === "markdown" && previewModes[activeFilePath] && (
+                <MarkdownPreview content={activeFile.content} />
+              )}
+            </div>
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-ctp-overlay0 gap-2">

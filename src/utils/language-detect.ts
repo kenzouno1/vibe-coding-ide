@@ -1,9 +1,9 @@
 /** Map file extensions to Monaco editor language IDs */
 const EXTENSION_MAP: Record<string, string> = {
   ts: "typescript",
-  tsx: "typescriptreact",
+  tsx: "typescript",
   js: "javascript",
-  jsx: "javascriptreact",
+  jsx: "javascript",
   mjs: "javascript",
   cjs: "javascript",
   json: "json",
@@ -41,6 +41,24 @@ const EXTENSION_MAP: Record<string, string> = {
   graphql: "graphql",
   lua: "lua",
 };
+
+/** Map file extensions to Catppuccin CSS variable color values for visual indicators */
+const EXTENSION_COLOR_MAP: Record<string, string> = {
+  ts: "var(--color-ctp-blue)",
+  tsx: "var(--color-ctp-sky)",
+  js: "var(--color-ctp-yellow)",
+  jsx: "var(--color-ctp-sky)",
+  html: "var(--color-ctp-peach)",
+  htm: "var(--color-ctp-peach)",
+  css: "var(--color-ctp-sapphire)",
+  py: "var(--color-ctp-green)",
+};
+
+/** Get Catppuccin color value for a file path (empty string if unmapped) */
+export function getLanguageColor(filePath: string): string {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  return EXTENSION_COLOR_MAP[ext] ?? "";
+}
 
 /** Detect Monaco language ID from a file path */
 export function detectLanguage(filePath: string): string {

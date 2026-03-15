@@ -94,6 +94,18 @@ export const SshTerminal = memo(function SshTerminal({
       });
     }, 300);
 
+    // Re-render terminal when window regains focus (canvas content lost while hidden)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        requestAnimationFrame(() => {
+          fitAddon.fit();
+          resize(term.rows, term.cols);
+          term.refresh(0, term.rows - 1);
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     const resizeObserver = new ResizeObserver(() => {
       if (viewRef.current !== "ssh") return;
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
@@ -105,6 +117,7 @@ export const SshTerminal = memo(function SshTerminal({
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       imeCleanup();
       resizeObserver.disconnect();
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);

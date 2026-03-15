@@ -3,6 +3,7 @@ import { useAppStore } from "@/stores/app-store";
 import { useGitStore } from "@/stores/git-store";
 import { useEditorStore } from "@/stores/editor-store";
 import { useProjectStore } from "@/stores/project-store";
+import { getLanguageColor } from "@/utils/language-detect";
 
 export function StatusBar() {
   const view = useAppStore((s) => s.view);
@@ -35,7 +36,7 @@ export function StatusBar() {
       {view === "editor" && activeEditorFile && (
         <div className="flex items-center gap-3">
           <span>Ln {editorState.cursorLine}, Col {editorState.cursorCol}</span>
-          <span className="capitalize">{activeEditorFile.language}</span>
+          <span className="capitalize" style={getLanguageColor(activeEditorFile.filePath) ? { color: getLanguageColor(activeEditorFile.filePath) } : undefined}>{activeEditorFile.language}</span>
         </div>
       )}
 

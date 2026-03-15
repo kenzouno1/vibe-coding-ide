@@ -89,10 +89,14 @@ export const TerminalPane = memo(function TerminalPane({
     term.loadAddon(fitAddon);
 
     term.open(containerRef.current);
-    fitAddon.fit();
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
+
+    // Defer initial fit — portal container may not have final layout
+    // dimensions immediately after DOM insertion (especially with
+    // the createElement + useLayoutEffect reparenting pattern).
+    requestAnimationFrame(() => fitAddon.fit());
 
     // Setup IME composition handler — intercepts Vietnamese IME input
     // (backspace-replace method) and sends composed text to PTY correctly.
@@ -127,11 +131,26 @@ export const TerminalPane = memo(function TerminalPane({
     };
     containerRef.current.addEventListener("paste", onPaste, { capture: true });
 
-    // Delayed initial resize — PTY might not be ready immediately
+    // Delayed initial resize — PTY might not be ready immediately.
+    // Use rAF inside timeout to ensure layout is fully resolved.
     setTimeout(() => {
-      fitAddon.fit();
-      resize(term.rows, term.cols);
-    }, 500);
+      requestAnimationFrame(() => {
+        fitAddon.fit();
+        resize(term.rows, term.cols);
+      });
+    }, 300);
+
+    // Re-render terminal when window regains focus (canvas content lost while hidden)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        requestAnimationFrame(() => {
+          fitAddon.fit();
+          resize(term.rows, term.cols);
+          term.refresh(0, term.rows - 1);
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     const resizeObserver = new ResizeObserver(() => {
       // Skip resize when terminal is hidden
@@ -146,6 +165,7 @@ export const TerminalPane = memo(function TerminalPane({
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       containerRef.current?.removeEventListener("paste", onPaste, { capture: true } as EventListenerOptions);
       imeCleanup();
       resizeObserver.disconnect();
@@ -158,12 +178,13 @@ export const TerminalPane = memo(function TerminalPane({
   useEffect(() => {
     const isVisible = view === "terminal" && activeTabPath === projectPath;
     if (isVisible && fitAddonRef.current && termRef.current) {
-      setTimeout(() => {
+      // Use rAF to ensure container has correct dimensions after visibility change
+      requestAnimationFrame(() => {
         fitAddonRef.current?.fit();
         if (termRef.current) {
           resize(termRef.current.rows, termRef.current.cols);
         }
-      }, 50);
+      });
     }
   }, [view, activeTabPath, projectPath, resize]);
 

@@ -1,32 +1,51 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen } from "lucide-react";
-import type { SshPreset } from "@/stores/ssh-types";
+import { useSshStore } from "@/stores/ssh-store";
+import type { SshSavedSession } from "@/stores/ssh-types";
 
-interface SshPresetFormProps {
-  preset?: SshPreset;
-  onSave: (preset: SshPreset) => void;
+interface SshSessionFormProps {
+  session?: SshSavedSession;
+  onSave: (session: SshSavedSession) => void;
   onCancel: () => void;
 }
 
-/** Form for creating/editing SSH preset templates (no host field) */
-export function SshPresetForm({ preset, onSave, onCancel }: SshPresetFormProps) {
-  const [name, setName] = useState(preset?.name ?? "");
-  const [port, setPort] = useState(preset?.port ?? 22);
-  const [username, setUsername] = useState(preset?.username ?? "root");
+/** Form for creating/editing saved SSH sessions (with preset template support) */
+export function SshSessionForm({ session, onSave, onCancel }: SshSessionFormProps) {
+  const presets = useSshStore((s) => s.presets);
+  const isNew = !session;
+
+  const [presetId, setPresetId] = useState(session?.preset_id ?? "");
+  const [name, setName] = useState(session?.name ?? "");
+  const [host, setHost] = useState(session?.host ?? "");
+  const [port, setPort] = useState(session?.port ?? 22);
+  const [username, setUsername] = useState(session?.username ?? "root");
   const [authMethod, setAuthMethod] = useState<"password" | "key">(
-    preset?.auth_method ?? "password",
+    session?.auth_method ?? "password",
   );
   const [privateKeyPath, setPrivateKeyPath] = useState(
-    preset?.private_key_path ?? "",
+    session?.private_key_path ?? "",
   );
-  const [startupCmd, setStartupCmd] = useState(preset?.startup_cmd ?? "");
+  const [startupCmd, setStartupCmd] = useState(session?.startup_cmd ?? "");
+
+  const applyPreset = (id: string) => {
+    setPresetId(id);
+    const tpl = presets.find((p) => p.id === id);
+    if (!tpl) return;
+    setPort(tpl.port);
+    setUsername(tpl.username);
+    setAuthMethod(tpl.auth_method);
+    setPrivateKeyPath(tpl.private_key_path ?? "");
+    setStartupCmd(tpl.startup_cmd ?? "");
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
-      id: preset?.id ?? crypto.randomUUID(),
-      name: name.trim() || `${username}:${port}`,
+      id: session?.id ?? crypto.randomUUID(),
+      name: name.trim() || `${username}@${host}`,
+      host: host.trim(),
+      preset_id: presetId || undefined,
       port,
       username: username.trim(),
       auth_method: authMethod,
@@ -48,25 +67,46 @@ export function SshPresetForm({ preset, onSave, onCancel }: SshPresetFormProps) 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3 p-4 max-w-md">
+      {/* Template dropdown */}
+      {presets.length > 0 && (
+        <div>
+          <label className="text-xs text-ctp-overlay1 mb-1 block">
+            Use template
+          </label>
+          <select
+            className={inputClass}
+            value={presetId}
+            onChange={(e) => applyPreset(e.target.value)}
+          >
+            <option value="">(None)</option>
+            {presets.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} — {p.username}:{p.port} ({p.auth_method})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div>
-        <label className="text-xs text-ctp-overlay1 mb-1 block">Template Name</label>
+        <label className="text-xs text-ctp-overlay1 mb-1 block">Name</label>
         <input
           className={inputClass}
-          placeholder="Ubuntu VPS"
+          placeholder="Production Server"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          required
         />
       </div>
       <div className="flex gap-2">
         <div className="flex-1">
-          <label className="text-xs text-ctp-overlay1 mb-1 block">Username</label>
+          <label className="text-xs text-ctp-overlay1 mb-1 block">Host</label>
           <input
             className={inputClass}
-            placeholder="root"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            placeholder="192.168.1.100"
+            value={host}
+            onChange={(e) => setHost(e.target.value)}
             required
+            autoFocus={isNew}
           />
         </div>
         <div className="w-20">
@@ -78,6 +118,16 @@ export function SshPresetForm({ preset, onSave, onCancel }: SshPresetFormProps) 
             onChange={(e) => setPort(Number(e.target.value))}
           />
         </div>
+      </div>
+      <div>
+        <label className="text-xs text-ctp-overlay1 mb-1 block">Username</label>
+        <input
+          className={inputClass}
+          placeholder="root"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+        />
       </div>
       <div>
         <label className="text-xs text-ctp-overlay1 mb-1 block">Auth Method</label>
@@ -141,7 +191,7 @@ export function SshPresetForm({ preset, onSave, onCancel }: SshPresetFormProps) 
           type="submit"
           className="px-4 py-1.5 bg-ctp-mauve text-ctp-base text-sm rounded hover:opacity-90 transition-opacity"
         >
-          {preset ? "Update" : "Save"}
+          {session ? "Update" : "Save"}
         </button>
         <button
           type="button"
