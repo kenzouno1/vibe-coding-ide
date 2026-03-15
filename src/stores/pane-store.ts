@@ -25,6 +25,8 @@ interface PaneStore {
   trees: Record<string, PaneNode>;
   /** Per-project active pane IDs */
   activeIds: Record<string, string>;
+  /** Map pane IDs to PTY session IDs (set when PTY spawns) */
+  ptySessionIds: Record<string, string>;
 
   getTree: (projectPath: string) => PaneNode;
   getActiveId: (projectPath: string) => string;
@@ -32,6 +34,8 @@ interface PaneStore {
   split: (projectPath: string, targetId: string, direction: SplitDirection) => void;
   closePane: (projectPath: string, targetId: string) => void;
   setRatio: (projectPath: string, splitId: string, ratio: number) => void;
+  setPtySessionId: (paneId: string, sessionId: string) => void;
+  getActivePtySessionId: (projectPath: string) => string | null;
   removeProject: (projectPath: string) => void;
 }
 
@@ -72,6 +76,7 @@ function collectLeafIds(node: PaneNode): string[] {
 export const usePaneStore = create<PaneStore>((set, get) => ({
   trees: {},
   activeIds: {},
+  ptySessionIds: {},
 
   getTree: (projectPath) => {
     const { trees } = get();
@@ -151,6 +156,18 @@ export const usePaneStore = create<PaneStore>((set, get) => ({
         trees: { ...s.trees, [projectPath]: newRoot || tree },
       };
     }),
+
+  setPtySessionId: (paneId, sessionId) =>
+    set((s) => ({
+      ptySessionIds: { ...s.ptySessionIds, [paneId]: sessionId },
+    })),
+
+  getActivePtySessionId: (projectPath) => {
+    const { activeIds, ptySessionIds } = get();
+    const activePaneId = activeIds[projectPath];
+    if (!activePaneId) return null;
+    return ptySessionIds[activePaneId] ?? null;
+  },
 
   removeProject: (projectPath) =>
     set((s) => {

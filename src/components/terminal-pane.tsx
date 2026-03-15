@@ -6,31 +6,9 @@ import { usePty } from "@/hooks/use-pty";
 import { setupImeHandler } from "@/hooks/use-ime-handler";
 import { useAppStore } from "@/stores/app-store";
 import { useProjectStore } from "@/stores/project-store";
+import { usePaneStore } from "@/stores/pane-store";
 
-const CATPPUCCIN_THEME = {
-  background: "#1e1e2e",
-  foreground: "#cdd6f4",
-  cursor: "#f5e0dc",
-  cursorAccent: "#1e1e2e",
-  selectionBackground: "#585b70",
-  selectionForeground: "#cdd6f4",
-  black: "#45475a",
-  red: "#f38ba8",
-  green: "#a6e3a1",
-  yellow: "#f9e2af",
-  blue: "#89b4fa",
-  magenta: "#f5c2e7",
-  cyan: "#94e2d5",
-  white: "#bac2de",
-  brightBlack: "#585b70",
-  brightRed: "#f38ba8",
-  brightGreen: "#a6e3a1",
-  brightYellow: "#f9e2af",
-  brightBlue: "#89b4fa",
-  brightMagenta: "#f5c2e7",
-  brightCyan: "#94e2d5",
-  brightWhite: "#a6adc8",
-};
+import { XTERM_OPTIONS } from "@/utils/xterm-config";
 
 /** Handle paste: uses Rust to read clipboard (supports both text and file paths) */
 async function handlePaste(write: (data: string) => void) {
@@ -51,12 +29,14 @@ async function handlePaste(write: (data: string) => void) {
 
 interface TerminalPaneProps {
   projectPath: string;
+  paneId: string;
   isActive?: boolean;
   onFocus?: () => void;
 }
 
 export const TerminalPane = memo(function TerminalPane({
   projectPath,
+  paneId,
   isActive,
   onFocus,
 }: TerminalPaneProps) {
@@ -72,21 +52,28 @@ export const TerminalPane = memo(function TerminalPane({
   const activeTabRef = useRef(activeTabPath);
   activeTabRef.current = activeTabPath;
 
+  const setPtySessionId = usePaneStore((s) => s.setPtySessionId);
   const cwd = projectPath !== "." ? projectPath : undefined;
 
-  const { write, resize } = usePty((data) => {
+  const { write, resize, sessionIdRef } = usePty((data) => {
     termRef.current?.write(data);
   }, cwd);
+
+  // Register PTY session ID in store when it becomes available
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (sessionIdRef.current) {
+        setPtySessionId(paneId, sessionIdRef.current);
+        clearInterval(interval);
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, [paneId, sessionIdRef, setPtySessionId]);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const term = new Terminal({
-      theme: CATPPUCCIN_THEME,
-      fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace",
-      fontSize: 14,
-      cursorBlink: true,
-    });
+    const term = new Terminal(XTERM_OPTIONS);
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);

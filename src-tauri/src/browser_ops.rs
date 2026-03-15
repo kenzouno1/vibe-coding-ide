@@ -76,6 +76,24 @@ const CONSOLE_BRIDGE_SCRIPT: &str = r#"
     try { reason = typeof reason === 'object' ? JSON.stringify(reason) : String(reason); } catch(e) { reason = '[Object]'; }
     send('error', ['Unhandled Promise: ' + reason]);
   });
+
+  // Text selection bridge — Ctrl+Shift+S sends selected text to terminal
+  document.addEventListener('keydown', function(ev) {
+    if (ev.ctrlKey && ev.shiftKey && ev.key === 'S') {
+      ev.preventDefault();
+      var sel = window.getSelection();
+      if (sel && sel.toString().trim()) {
+        try {
+          if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
+            window.__TAURI__.core.invoke('forward_browser_selection', {
+              text: sel.toString(),
+              pageUrl: location.href
+            });
+          }
+        } catch(e) {}
+      }
+    }
+  });
 })();
 "#;
 
@@ -90,6 +108,26 @@ fn parse_url(url: &str) -> Result<WebviewUrl, String> {
             url.parse().map_err(|e| format!("Invalid URL: {e}"))?,
         ))
     }
+}
+
+/// Relay text selection from child webview to main app event bus.
+#[tauri::command]
+pub async fn forward_browser_selection(
+    app: tauri::AppHandle,
+    webview: tauri::Webview,
+    text: String,
+    page_url: String,
+) -> Result<(), String> {
+    let label = webview.label().to_string();
+    let _ = app.emit(
+        "browser-selection",
+        serde_json::json!({
+            "label": label,
+            "text": text,
+            "url": page_url,
+        }),
+    );
+    Ok(())
 }
 
 /// Create a child webview inside the main window at the given position/size.

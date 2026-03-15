@@ -1,10 +1,12 @@
 import { useEffect, useRef, useCallback, memo } from "react";
-import { Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Trash2, ChevronDown, ChevronUp, ArrowRight, Send } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   useBrowserStore,
   type ConsoleLog,
   type ConsoleFilter,
 } from "@/stores/browser-store";
+import { usePaneStore } from "@/stores/pane-store";
 
 const LEVEL_COLORS: Record<ConsoleLog["level"], string> = {
   error: "text-ctp-red",
@@ -41,12 +43,13 @@ function formatTime(ts: number): string {
 
 interface ConsoleLogEntryProps {
   log: ConsoleLog;
+  onSend?: (text: string) => void;
 }
 
-const ConsoleLogEntry = memo(function ConsoleLogEntry({ log }: ConsoleLogEntryProps) {
+const ConsoleLogEntry = memo(function ConsoleLogEntry({ log, onSend }: ConsoleLogEntryProps) {
   return (
     <div
-      className={`flex gap-2 px-2 py-0.5 text-xs font-mono border-b border-ctp-surface0/50 ${LEVEL_BG[log.level]}`}
+      className={`flex gap-2 px-2 py-0.5 text-xs font-mono border-b border-ctp-surface0/50 group ${LEVEL_BG[log.level]}`}
     >
       <span className="text-ctp-overlay0 shrink-0 w-[85px]">
         {formatTime(log.timestamp)}
@@ -57,6 +60,15 @@ const ConsoleLogEntry = memo(function ConsoleLogEntry({ log }: ConsoleLogEntryPr
       <span className="text-ctp-text whitespace-pre-wrap break-all flex-1">
         {log.message}
       </span>
+      {onSend && (
+        <button
+          onClick={() => onSend(`# [Browser ${log.level.toUpperCase()}] ${log.message}`)}
+          className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-ctp-surface0 text-ctp-overlay0 hover:text-ctp-mauve transition-all"
+          title="Send to terminal"
+        >
+          <ArrowRight size={12} />
+        </button>
+      )}
     </div>
   );
 });
@@ -72,11 +84,36 @@ export const BrowserConsolePanel = memo(function BrowserConsolePanel({
   const clearLogs = useBrowserStore((s) => s.clearLogs);
   const setConsoleFilter = useBrowserStore((s) => s.setConsoleFilter);
   const toggleConsolePanel = useBrowserStore((s) => s.toggleConsolePanel);
+  const getActivePtySessionId = usePaneStore((s) => s.getActivePtySessionId);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
 
   const { consoleLogs, consoleFilter, consolePanelOpen } = browserState;
+
+  // Send text to the active terminal PTY
+  const sendToTerminal = useCallback(
+    async (text: string) => {
+      const sessionId = getActivePtySessionId(projectPath);
+      if (!sessionId) return;
+      try {
+        await invoke("write_pty", { id: sessionId, data: text + "\n" });
+      } catch (err) {
+        console.error("Failed to send to terminal:", err);
+      }
+    },
+    [projectPath, getActivePtySessionId],
+  );
+
+  // Send all error logs to terminal
+  const sendAllErrors = useCallback(() => {
+    const errors = consoleLogs.filter((l) => l.level === "error");
+    if (errors.length === 0) return;
+    const text = errors
+      .map((e) => `# [Browser ERROR] ${e.message}`)
+      .join("\n");
+    sendToTerminal(text);
+  }, [consoleLogs, sendToTerminal]);
 
   // Filter logs based on selected filter
   const filteredLogs =
@@ -148,6 +185,18 @@ export const BrowserConsolePanel = memo(function BrowserConsolePanel({
           </div>
         )}
 
+        {/* Send all errors to terminal */}
+        {consolePanelOpen && errorCount > 0 && (
+          <button
+            onClick={sendAllErrors}
+            className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded hover:bg-ctp-surface0 text-ctp-overlay1 hover:text-ctp-mauve transition-colors"
+            title="Send all errors to terminal"
+          >
+            <Send size={10} />
+            <span>Send Errors</span>
+          </button>
+        )}
+
         {/* Clear button */}
         <button
           onClick={() => clearLogs(projectPath)}
@@ -171,7 +220,7 @@ export const BrowserConsolePanel = memo(function BrowserConsolePanel({
             </div>
           ) : (
             filteredLogs.map((log, i) => (
-              <ConsoleLogEntry key={`${log.timestamp}-${i}`} log={log} />
+              <ConsoleLogEntry key={`${log.timestamp}-${i}`} log={log} onSend={sendToTerminal} />
             ))
           )}
         </div>

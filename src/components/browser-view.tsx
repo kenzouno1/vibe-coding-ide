@@ -4,14 +4,10 @@ import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "@/stores/app-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useBrowserStore, type ConsoleLog } from "@/stores/browser-store";
+import { usePaneStore } from "@/stores/pane-store";
 import { BrowserUrlBar } from "@/components/browser-url-bar";
 import { BrowserConsolePanel } from "@/components/browser-console-panel";
-
-/**
- * Replicate the Rust DefaultHasher label generation for event filtering.
- * Uses FNV-1a-like hash (matches Rust's DefaultHasher for simple strings).
- * We pass projectId to Rust which generates label — so we match by projectId in events instead.
- */
+import { useServerDetect } from "@/hooks/use-server-detect";
 
 interface BrowserViewProps {
   projectPath: string;
@@ -20,6 +16,9 @@ interface BrowserViewProps {
 export const BrowserView = memo(function BrowserView({
   projectPath,
 }: BrowserViewProps) {
+  // Auto-detect dev server URLs from terminal output
+  useServerDetect(projectPath);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guard against double webview creation from rapid view toggles
@@ -33,6 +32,7 @@ export const BrowserView = memo(function BrowserView({
   const setLoading = useBrowserStore((s) => s.setLoading);
   const setTitle = useBrowserStore((s) => s.setTitle);
   const addLog = useBrowserStore((s) => s.addLog);
+  const getActivePtySessionId = usePaneStore((s) => s.getActivePtySessionId);
 
   // Keep refs for resize observer callback (avoids stale closures)
   const viewRef = useRef(view);
@@ -171,10 +171,30 @@ export const BrowserView = memo(function BrowserView({
       ),
     );
 
+    // Text selection capture — Ctrl+Shift+S in browser sends text to terminal
+    unlisteners.push(
+      listen<{ label: string; text: string; url: string }>(
+        "browser-selection",
+        async (event) => {
+          if (activeTabRef.current !== projectPath) return;
+          const sessionId = getActivePtySessionId(projectPath);
+          if (!sessionId) return;
+          try {
+            await invoke("write_pty", {
+              id: sessionId,
+              data: event.payload.text,
+            });
+          } catch {
+            // PTY may not exist
+          }
+        },
+      ),
+    );
+
     return () => {
       unlisteners.forEach((u) => u.then((fn) => fn()));
     };
-  }, [projectPath, setUrl, setLoading, setTitle, addLog]);
+  }, [projectPath, setUrl, setLoading, setTitle, addLog, getActivePtySessionId]);
 
   return (
     <div className="flex flex-col h-full w-full">

@@ -22,6 +22,7 @@ export function SplitPaneContainer({ projectPath, node }: SplitPaneContainerProp
     return (
       <TerminalPane
         projectPath={projectPath}
+        paneId={resolvedNode.id}
         isActive={resolvedNode.id === activeId}
         onFocus={() => setActive(projectPath, resolvedNode.id)}
       />

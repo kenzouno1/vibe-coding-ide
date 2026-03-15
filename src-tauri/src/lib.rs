@@ -61,6 +61,8 @@ pub fn run() {
             file_ops::rename_entry,
             file_ops::delete_entry,
             ssh_manager::ssh_connect,
+            ssh_manager::ssh_open_channel,
+            ssh_manager::ssh_close_channel,
             ssh_manager::ssh_write,
             ssh_manager::ssh_resize,
             ssh_manager::ssh_disconnect,
@@ -69,6 +71,11 @@ pub fn run() {
             sftp_ops::sftp_upload,
             sftp_ops::sftp_mkdir,
             sftp_ops::sftp_delete,
+            sftp_ops::sftp_create_file,
+            sftp_ops::sftp_chmod,
+            sftp_ops::sftp_rename,
+            sftp_ops::sftp_copy,
+            sftp_ops::sftp_stat,
             ssh_presets::ssh_preset_list,
             ssh_presets::ssh_preset_save,
             ssh_presets::ssh_preset_delete,
@@ -82,6 +89,7 @@ pub fn run() {
             browser_ops::hide_browser_webview,
             browser_ops::destroy_browser_webview,
             browser_ops::forward_console_log,
+            browser_ops::forward_browser_selection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
