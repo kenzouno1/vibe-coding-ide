@@ -1,11 +1,19 @@
-import { X, Plus } from "lucide-react";
+import { X, Plus, Bot } from "lucide-react";
 import { useSshStore } from "@/stores/ssh-store";
 
 interface SshTabBarProps {
   onNewTab: () => void;
+  showAgentToggle?: boolean;
+  agentActive?: boolean;
+  onToggleAgent?: () => void;
 }
 
-export function SshTabBar({ onNewTab }: SshTabBarProps) {
+export function SshTabBar({
+  onNewTab,
+  showAgentToggle,
+  agentActive,
+  onToggleAgent,
+}: SshTabBarProps) {
   const tabOrder = useSshStore((s) => s.tabOrder);
   const activeSessionId = useSshStore((s) => s.activeSessionId);
   const connections = useSshStore((s) => s.connections);
@@ -20,8 +28,9 @@ export function SshTabBar({ onNewTab }: SshTabBarProps) {
         const preset = presets.find((p) => p.id === conn?.presetId);
         const isActive = sessionId === activeSessionId;
         const isConnected = conn?.status === "connected";
-
-        const label = preset?.name ?? (preset ? `${preset.host}:${preset.port}` : sessionId.slice(0, 8));
+        const label =
+          preset?.name ??
+          (preset ? `${preset.host}:${preset.port}` : sessionId.slice(0, 8));
 
         return (
           <div
@@ -29,12 +38,12 @@ export function SshTabBar({ onNewTab }: SshTabBarProps) {
             onClick={() => setActiveSession(sessionId)}
             className={`group flex items-center gap-1.5 px-3 h-full text-xs cursor-pointer
               border-r border-ctp-surface0 shrink-0 transition-colors
-              ${isActive
-                ? "bg-ctp-surface0 text-ctp-mauve border-b-2 border-b-ctp-mauve"
-                : "text-ctp-overlay1 hover:text-ctp-text hover:bg-ctp-surface0"
+              ${
+                isActive
+                  ? "bg-ctp-surface0 text-ctp-mauve border-b-2 border-b-ctp-mauve"
+                  : "text-ctp-overlay1 hover:text-ctp-text hover:bg-ctp-surface0"
               }`}
           >
-            {/* Connection status dot */}
             <span
               className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                 isConnected ? "bg-ctp-green" : "bg-ctp-overlay0"
@@ -62,6 +71,25 @@ export function SshTabBar({ onNewTab }: SshTabBarProps) {
       >
         <Plus size={14} />
       </button>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* AI Agent toggle */}
+      {showAgentToggle && (
+        <button
+          onClick={onToggleAgent}
+          title={agentActive ? "Hide AI Agent Terminal" : "Show AI Agent Terminal"}
+          className={`px-2 h-full shrink-0 transition-colors flex items-center gap-1 text-xs ${
+            agentActive
+              ? "bg-ctp-surface0 text-ctp-mauve"
+              : "text-ctp-overlay1 hover:text-ctp-text hover:bg-ctp-surface0"
+          }`}
+        >
+          <Bot size={14} />
+          <span>AI</span>
+        </button>
+      )}
     </div>
   );
 }
