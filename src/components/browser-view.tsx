@@ -1,10 +1,11 @@
-import { useEffect, useRef, useCallback, useMemo, memo } from "react";
+import { useEffect, useRef, useCallback, memo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "@/stores/app-store";
 import { useProjectStore } from "@/stores/project-store";
-import { useBrowserStore } from "@/stores/browser-store";
+import { useBrowserStore, type ConsoleLog } from "@/stores/browser-store";
 import { BrowserUrlBar } from "@/components/browser-url-bar";
+import { BrowserConsolePanel } from "@/components/browser-console-panel";
 
 /**
  * Replicate the Rust DefaultHasher label generation for event filtering.
@@ -31,22 +32,13 @@ export const BrowserView = memo(function BrowserView({
   const setUrl = useBrowserStore((s) => s.setUrl);
   const setLoading = useBrowserStore((s) => s.setLoading);
   const setTitle = useBrowserStore((s) => s.setTitle);
+  const addLog = useBrowserStore((s) => s.addLog);
 
   // Keep refs for resize observer callback (avoids stale closures)
   const viewRef = useRef(view);
   viewRef.current = view;
   const activeTabRef = useRef(activeTabPath);
   activeTabRef.current = activeTabPath;
-
-  // Compute expected webview label for event filtering
-  // Must match Rust's webview_label() — we use projectPath as the key
-  const expectedLabel = useMemo(() => {
-    // We can't replicate DefaultHasher in JS, so we filter by checking
-    // if the label starts with "browser-" and match events by projectPath.
-    // Instead, we'll pass projectId in events and filter on that.
-    // For now, each BrowserView only processes events if it's the active project.
-    return projectPath;
-  }, [projectPath]);
 
   // Send current container bounds to Rust for webview positioning
   const syncBounds = useCallback(async () => {
@@ -162,10 +154,27 @@ export const BrowserView = memo(function BrowserView({
       ),
     );
 
+    // Console log capture — relayed from child webview via Rust forward_console_log
+    unlisteners.push(
+      listen<{ label: string; level: string; message: string; timestamp: number; url: string }>(
+        "browser-console",
+        (event) => {
+          // Only process logs from this project's webview (label-based filtering)
+          if (activeTabRef.current !== projectPath) return;
+          addLog(projectPath, {
+            level: event.payload.level as ConsoleLog["level"],
+            message: event.payload.message,
+            timestamp: event.payload.timestamp,
+            url: event.payload.url,
+          });
+        },
+      ),
+    );
+
     return () => {
       unlisteners.forEach((u) => u.then((fn) => fn()));
     };
-  }, [projectPath, setUrl, setLoading, setTitle]);
+  }, [projectPath, setUrl, setLoading, setTitle, addLog]);
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -181,6 +190,10 @@ export const BrowserView = memo(function BrowserView({
           </div>
         )}
       </div>
+      {/* Console panel — shows captured console logs from embedded browser */}
+      {browserState.webviewCreated && (
+        <BrowserConsolePanel projectPath={projectPath} />
+      )}
     </div>
   );
 });

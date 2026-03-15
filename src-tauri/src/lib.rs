@@ -81,6 +81,7 @@ pub fn run() {
             browser_ops::show_browser_webview,
             browser_ops::hide_browser_webview,
             browser_ops::destroy_browser_webview,
+            browser_ops::forward_console_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

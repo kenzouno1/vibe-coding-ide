@@ -19,6 +19,66 @@ fn get_child_webview(
         .ok_or_else(|| "Browser webview not found".to_string())
 }
 
+/// JS bridge injected into every page loaded in the browser webview.
+/// Overrides console.log/warn/error/info and captures uncaught errors.
+/// Uses Tauri IPC invoke (forward_console_log command) to relay logs to main app.
+const CONSOLE_BRIDGE_SCRIPT: &str = r#"
+(function() {
+  if (window.__DEVTOOLS_BRIDGE__) return;
+  window.__DEVTOOLS_BRIDGE__ = true;
+
+  var orig = {
+    log: console.log.bind(console),
+    warn: console.warn.bind(console),
+    error: console.error.bind(console),
+    info: console.info.bind(console)
+  };
+
+  function ser(args) {
+    var parts = [];
+    for (var i = 0; i < args.length; i++) {
+      try {
+        if (args[i] === null) parts.push('null');
+        else if (args[i] === undefined) parts.push('undefined');
+        else if (typeof args[i] === 'object') parts.push(JSON.stringify(args[i], null, 2));
+        else parts.push(String(args[i]));
+      } catch(e) { parts.push('[Unserializable]'); }
+    }
+    return parts.join(' ');
+  }
+
+  function send(level, args) {
+    orig[level].apply(console, args);
+    try {
+      if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
+        window.__TAURI__.core.invoke('forward_console_log', {
+          level: level,
+          message: ser(args),
+          timestamp: Date.now(),
+          pageUrl: location.href
+        });
+      }
+    } catch(e) {}
+  }
+
+  console.log = function() { send('log', arguments); };
+  console.warn = function() { send('warn', arguments); };
+  console.error = function() { send('error', arguments); };
+  console.info = function() { send('info', arguments); };
+
+  window.addEventListener('error', function(ev) {
+    var msg = (ev.message || 'Unknown error') + ' at ' + (ev.filename || '?') + ':' + (ev.lineno || 0) + ':' + (ev.colno || 0);
+    send('error', [msg]);
+  });
+
+  window.addEventListener('unhandledrejection', function(ev) {
+    var reason = ev.reason;
+    try { reason = typeof reason === 'object' ? JSON.stringify(reason) : String(reason); } catch(e) { reason = '[Object]'; }
+    send('error', ['Unhandled Promise: ' + reason]);
+  });
+})();
+"#;
+
 /// Parse URL string into WebviewUrl
 fn parse_url(url: &str) -> Result<WebviewUrl, String> {
     if url == "about:blank" || url.is_empty() {
@@ -65,6 +125,7 @@ pub async fn create_browser_webview(
     let label_for_title = label.clone();
 
     let builder = WebviewBuilder::new(&label, parsed_url)
+        .initialization_script(CONSOLE_BRIDGE_SCRIPT)
         .on_navigation(move |nav_url| {
             let url_str = nav_url.to_string();
             // Block dangerous URL schemes
@@ -114,6 +175,32 @@ pub async fn create_browser_webview(
         )
         .map_err(|e| format!("Failed to create webview: {e}"))?;
 
+    Ok(())
+}
+
+/// Relay console log from child webview to main app event bus.
+/// Called by JS bridge in child webview via Tauri IPC invoke.
+/// The webview label is extracted from the calling webview to identify the project.
+#[tauri::command]
+pub async fn forward_console_log(
+    app: tauri::AppHandle,
+    webview: tauri::Webview,
+    level: String,
+    message: String,
+    timestamp: f64,
+    page_url: String,
+) -> Result<(), String> {
+    let label = webview.label().to_string();
+    let _ = app.emit(
+        "browser-console",
+        serde_json::json!({
+            "label": label,
+            "level": level,
+            "message": message,
+            "timestamp": timestamp,
+            "url": page_url,
+        }),
+    );
     Ok(())
 }
 
