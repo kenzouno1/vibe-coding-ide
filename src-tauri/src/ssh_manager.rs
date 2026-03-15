@@ -207,7 +207,10 @@ pub async fn ssh_connect(
     };
 
     if !auth_ok {
-        return Err("Authentication failed. For key auth, ensure the key is in OpenSSH PEM format (not PuTTY PPK). Use 'ssh-keygen -i -f key.ppk > key.pem' to convert.".to_string());
+        return Err(format!(
+            "Authentication failed for {username}@{host}:{port} using {auth_method}. \
+            Server may not accept this key/password. Check server's authorized_keys or sshd_config."
+        ));
     }
 
     // Open default channel with PTY + shell
