@@ -110,20 +110,25 @@ export const TerminalPane = memo(function TerminalPane({
       if (!imeState.composing) write(data);
     });
 
-    // Handle paste (Ctrl+V), copy (Ctrl+C), and block keys during IME
+    // Handle copy (Ctrl+C) and block keys during IME
     term.attachCustomKeyEventHandler((e) => {
       // Block xterm key processing during IME composition
       if (imeState.composing) return false;
-      if (e.type === "keydown" && e.ctrlKey && e.key === "v") {
-        handlePaste(write);
-        return false;
-      }
       if (e.type === "keydown" && e.ctrlKey && e.key === "c" && term.hasSelection()) {
         navigator.clipboard.writeText(term.getSelection());
         return false;
       }
       return true;
     });
+
+    // Intercept paste event to use our custom clipboard handler (supports file paths).
+    // This replaces xterm's built-in paste and prevents double-paste.
+    const onPaste = (e: ClipboardEvent) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      handlePaste(write);
+    };
+    containerRef.current.addEventListener("paste", onPaste, { capture: true });
 
     // Delayed initial resize — PTY might not be ready immediately
     setTimeout(() => {
@@ -144,6 +149,7 @@ export const TerminalPane = memo(function TerminalPane({
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      containerRef.current?.removeEventListener("paste", onPaste, { capture: true } as EventListenerOptions);
       imeCleanup();
       resizeObserver.disconnect();
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
