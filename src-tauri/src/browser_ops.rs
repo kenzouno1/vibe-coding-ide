@@ -69,6 +69,9 @@ const CONSOLE_BRIDGE_SCRIPT: &str = r#"
   console.error = function() { send('error', arguments); };
   console.info = function() { send('info', arguments); };
 
+  // Signal that bridge is active
+  send('info', ['[DevTools] Console bridge active']);
+
   window.addEventListener('error', function(ev) {
     var msg = (ev.message || 'Unknown error') + ' at ' + (ev.filename || '?') + ':' + (ev.lineno || 0) + ':' + (ev.colno || 0);
     send('error', [msg]);
@@ -79,6 +82,22 @@ const CONSOLE_BRIDGE_SCRIPT: &str = r#"
     try { reason = typeof reason === 'object' ? JSON.stringify(reason) : String(reason); } catch(e) { reason = '[Object]'; }
     send('error', ['Unhandled Promise: ' + reason]);
   });
+
+  // Capture network errors (fetch 4xx/5xx)
+  if (window.fetch) {
+    var origFetch = window.fetch.bind(window);
+    window.fetch = function() {
+      return origFetch.apply(this, arguments).then(function(response) {
+        if (!response.ok) {
+          send('error', ['Network ' + response.status + ': ' + response.url]);
+        }
+        return response;
+      }).catch(function(err) {
+        send('error', ['Network error: ' + err.message]);
+        throw err;
+      });
+    };
+  }
 
   // Text selection bridge — Ctrl+Shift+S stores selection for Rust to poll
   document.addEventListener('keydown', function(ev) {
@@ -195,6 +214,9 @@ pub async fn create_browser_webview(
             );
         })
         .on_document_title_changed(move |_webview, title| {
+            // Debug: log all title changes
+            log::info!("[browser] title changed: {}", &title[..title.len().min(100)]);
+
             // Intercept console log flush signal from polling thread
             // Format: __DEVTOOLS_FLUSH_{counter}__[json array]
             if title.starts_with("__DEVTOOLS_FLUSH_") {
