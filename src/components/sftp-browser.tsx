@@ -12,9 +12,10 @@ interface SftpBrowserProps {
 }
 
 export function SftpBrowser({ sessionId }: SftpBrowserProps) {
-  const { sftpPath, sftpEntries, sftpLoading, sftpError } = useSshStore(
-    (s) => s.getSessionSftp(sessionId),
-  );
+  const sftpPath = useSshStore((s) => s.connections[sessionId]?.sftpPath ?? "/");
+  const sftpEntries = useSshStore((s) => s.connections[sessionId]?.sftpEntries ?? []);
+  const sftpLoading = useSshStore((s) => s.connections[sessionId]?.sftpLoading ?? false);
+  const sftpError = useSshStore((s) => s.connections[sessionId]?.sftpError ?? null);
   const browsePath = useSshStore((s) => s.browsePath);
   const getActiveSftpCredentials = useSshStore((s) => s.getActiveSftpCredentials);
   const [opError, setOpError] = useState<string | null>(null);

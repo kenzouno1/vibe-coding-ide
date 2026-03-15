@@ -25,7 +25,9 @@ export const SshTerminal = memo(function SshTerminal({
   const viewRef = useRef(view);
   viewRef.current = view;
 
+  console.log("[ssh-terminal] Rendering with sessionId:", sessionId, "channelId:", channelId);
   const { write, resize } = useSsh(sessionId, channelId, (data) => {
+    console.log("[ssh-terminal] Got data, len:", data.length, "termRef:", !!termRef.current);
     termRef.current?.write(data);
   });
 

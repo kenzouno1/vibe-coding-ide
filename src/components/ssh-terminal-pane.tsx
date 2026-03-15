@@ -18,6 +18,8 @@ export function SshTerminalPane({
     (s) => s.connections[sessionId]?.channelMap[paneId] ?? null,
   );
 
+  console.log("[ssh-terminal-pane] sessionId:", sessionId, "paneId:", paneId, "channelId:", channelId);
+
   if (!channelId) {
     return (
       <div className="h-full w-full flex items-center justify-center text-ctp-overlay0 text-xs">
