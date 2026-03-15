@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { ArrowLeft, ArrowRight, RotateCw, Loader2, Camera } from "lucide-react";
+import { ArrowLeft, ArrowRight, RotateCw, Loader2, Camera, PanelTop, Maximize2 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useBrowserStore } from "@/stores/browser-store";
 
@@ -10,6 +10,7 @@ interface BrowserUrlBarProps {
 export function BrowserUrlBar({ projectPath }: BrowserUrlBarProps) {
   const browserState = useBrowserStore((s) => s.getState(projectPath));
   const setUrl = useBrowserStore((s) => s.setUrl);
+  const toggleLayoutMode = useBrowserStore((s) => s.toggleLayoutMode);
   const [inputValue, setInputValue] = useState(browserState.url);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -140,6 +141,15 @@ export function BrowserUrlBar({ projectPath }: BrowserUrlBarProps) {
         className="p-1.5 rounded hover:bg-ctp-surface0 text-ctp-overlay1 hover:text-ctp-mauve transition-colors"
       >
         <Camera size={16} />
+      </button>
+
+      {/* Float/dock toggle */}
+      <button
+        onClick={() => toggleLayoutMode(projectPath)}
+        title={browserState.layoutMode === "docked" ? "Float browser" : "Dock browser"}
+        className="p-1.5 rounded hover:bg-ctp-surface0 text-ctp-overlay1 hover:text-ctp-text transition-colors"
+      >
+        {browserState.layoutMode === "docked" ? <Maximize2 size={16} /> : <PanelTop size={16} />}
       </button>
 
       {/* Page title (truncated) */}

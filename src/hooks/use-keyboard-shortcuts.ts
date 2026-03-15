@@ -61,6 +61,15 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Browser DevTools toggle (F12 in browser view)
+      if (view === "browser" && e.key === "F12") {
+        e.preventDefault();
+        import("@tauri-apps/api/core").then(({ invoke }) => {
+          invoke("open_browser_devtools", { projectId: project });
+        });
+        return;
+      }
+
       // Tab switching: Ctrl+Tab / Ctrl+Shift+Tab
       if (isCtrl && e.key === "Tab") {
         e.preventDefault();

@@ -93,6 +93,7 @@ pub fn run() {
             browser_ops::capture_browser_screenshot,
             browser_ops::receive_browser_screenshot,
             browser_ops::write_screenshot,
+            browser_ops::open_browser_devtools,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

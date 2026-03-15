@@ -29,6 +29,12 @@ export interface BrowserState {
   annotationTool: AnnotationTool;
   annotationColor: string;
   annotationStrokeWidth: number;
+  // Float layout
+  layoutMode: "docked" | "float";
+  floatX: number;
+  floatY: number;
+  floatWidth: number;
+  floatHeight: number;
 }
 
 const DEFAULT_STATE: BrowserState = {
@@ -46,6 +52,11 @@ const DEFAULT_STATE: BrowserState = {
   annotationTool: "pen",
   annotationColor: "#f38ba8",
   annotationStrokeWidth: 3,
+  layoutMode: "docked",
+  floatX: 100,
+  floatY: 100,
+  floatWidth: 480,
+  floatHeight: 360,
 };
 
 interface BrowserStore {
@@ -65,6 +76,9 @@ interface BrowserStore {
   setAnnotationTool: (projectPath: string, tool: AnnotationTool) => void;
   setAnnotationColor: (projectPath: string, color: string) => void;
   setAnnotationStrokeWidth: (projectPath: string, width: number) => void;
+  toggleLayoutMode: (projectPath: string) => void;
+  setFloatPosition: (projectPath: string, x: number, y: number) => void;
+  setFloatSize: (projectPath: string, width: number, height: number) => void;
   removeProject: (projectPath: string) => void;
 }
 
@@ -136,6 +150,20 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
 
   setAnnotationStrokeWidth: (projectPath, width) =>
     set((s) => ({ states: updateState(s.states, projectPath, { annotationStrokeWidth: width }) })),
+
+  toggleLayoutMode: (projectPath) =>
+    set((s) => {
+      const current = s.states[projectPath] ?? DEFAULT_STATE;
+      return { states: updateState(s.states, projectPath, {
+        layoutMode: current.layoutMode === "docked" ? "float" : "docked",
+      }) };
+    }),
+
+  setFloatPosition: (projectPath, x, y) =>
+    set((s) => ({ states: updateState(s.states, projectPath, { floatX: x, floatY: y }) })),
+
+  setFloatSize: (projectPath, width, height) =>
+    set((s) => ({ states: updateState(s.states, projectPath, { floatWidth: width, floatHeight: height }) })),
 
   removeProject: (projectPath) => {
     invoke("destroy_browser_webview", { projectId: projectPath }).catch(() => {});

@@ -468,3 +468,15 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     }
     Ok(output)
 }
+
+/// Open DevTools for the browser webview (development only)
+#[tauri::command]
+pub async fn open_browser_devtools(
+    app: tauri::AppHandle,
+    project_id: String,
+) -> Result<(), String> {
+    let label = webview_label(&project_id);
+    let webview = get_child_webview(&app, &label)?;
+    webview.open_devtools();
+    Ok(())
+}
