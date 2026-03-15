@@ -7,19 +7,12 @@ import { setupImeHandler } from "@/hooks/use-ime-handler";
 import { useAppStore } from "@/stores/app-store";
 import { XTERM_OPTIONS } from "@/utils/xterm-config";
 
-interface SshAgentTerminalProps {
-  /** Working directory for the local PTY shell */
-  cwd?: string;
-}
-
 /**
  * Local terminal panel embedded in SSH view.
- * Runs a local shell (cmd/bash) where user can launch Claude Code
- * or other AI agents that connect to the SSH WS server.
+ * Runs in ~/.devtools/agent-workspace which contains CLAUDE.md
+ * with instructions for AI agents to connect to SSH WS server.
  */
-export const SshAgentTerminal = memo(function SshAgentTerminal({
-  cwd,
-}: SshAgentTerminalProps) {
+export const SshAgentTerminal = memo(function SshAgentTerminal() {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -31,7 +24,7 @@ export const SshAgentTerminal = memo(function SshAgentTerminal({
 
   const { write, resize } = usePty((data) => {
     termRef.current?.write(data);
-  }, cwd);
+  }, undefined); // Uses default CWD; auto-cd handled below
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -72,7 +65,9 @@ export const SshAgentTerminal = memo(function SshAgentTerminal({
     setTimeout(() => {
       fitAddon.fit();
       resize(term.rows, term.cols);
-    }, 500);
+      // Auto-cd to agent workspace where CLAUDE.md lives
+      write("cd ~/.devtools/agent-workspace && clear\r");
+    }, 800);
 
     const resizeObserver = new ResizeObserver(() => {
       if (viewRef.current !== "ssh") return;
