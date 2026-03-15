@@ -44,7 +44,8 @@ impl Handler for SshClientHandler {
     ) -> Result<(), Self::Error> {
         let label = self.resolve_channel_label(channel).await;
         let text = String::from_utf8_lossy(data).to_string();
-        let _ = self.app.emit(
+        log::info!("SSH data received: session={}, channel={}, len={}", self.session_id, label, text.len());
+        let emit_result = self.app.emit(
             "ssh-output",
             SshOutput {
                 id: self.session_id.clone(),
@@ -52,6 +53,9 @@ impl Handler for SshClientHandler {
                 data: text.clone(),
             },
         );
+        if let Err(e) = emit_result {
+            log::error!("SSH emit failed: {e}");
+        }
         // Broadcast for agent WS server
         let _ = self.output_tx.send((self.session_id.clone(), label, text));
         Ok(())
