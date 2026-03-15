@@ -89,6 +89,7 @@ async fn setup_channel(
         .await
         .map_err(|e| format!("Shell failed: {e}"))?;
 
+    log::info!("SSH channel ready: session={session_id}, label={label}");
     // Split channel into AsyncRead + AsyncWrite halves
     let stream = channel.into_stream();
     let (read_half, write_half) = tokio::io::split(stream);
@@ -102,12 +103,17 @@ async fn setup_channel(
     let otx = output_tx.clone();
 
     let reader_handle = tokio::spawn(async move {
+        log::info!("SSH reader started: session={sid}, channel={lbl}");
         let mut reader = read_half;
         let mut buf = [0u8; 4096];
         loop {
             match reader.read(&mut buf).await {
-                Ok(0) => break, // EOF
+                Ok(0) => {
+                    log::info!("SSH reader EOF: session={sid}, channel={lbl}");
+                    break;
+                }
                 Ok(n) => {
+                    log::info!("SSH reader got {n} bytes: session={sid}, channel={lbl}");
                     let text = String::from_utf8_lossy(&buf[..n]).to_string();
                     let _ = app_clone.emit(
                         "ssh-output",
@@ -119,7 +125,10 @@ async fn setup_channel(
                     );
                     let _ = otx.send((sid.clone(), lbl.clone(), text));
                 }
-                Err(_) => break,
+                Err(e) => {
+                    log::error!("SSH reader error: {e}, session={sid}, channel={lbl}");
+                    break;
+                }
             }
         }
     });
