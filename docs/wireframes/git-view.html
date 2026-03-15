@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DevTools — Git View</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            base: '#0d1117',
+            surface: '#161b22',
+            elevated: '#1c2128',
+            border: '#30363d',
+            'border-muted': '#21262d',
+            'text-primary': '#e6edf3',
+            'text-secondary': '#8b949e',
+            'text-muted': '#484f58',
+            accent: '#58a6ff',
+            green: '#3fb950',
+            red: '#f85149',
+            yellow: '#d29922',
+            purple: '#bc8cff',
+            selection: '#264f78',
+            'diff-add': '#12261e',
+            'diff-del': '#2d1318',
+            'diff-add-hl': '#1a4028',
+            'diff-del-hl': '#4c1520',
+          },
+          fontFamily: {
+            mono: ['JetBrains Mono', 'monospace'],
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0d1117; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+    .kbd { font-family: 'JetBrains Mono', monospace; font-size: 10px; background: #21262d;
+           border: 1px solid #30363d; border-radius: 3px; padding: 1px 5px; color: #8b949e; }
+    .sidebar-item-active { border-left: 2px solid #58a6ff; background: #1c212844; }
+    .file-row:hover { background: #1c2128; }
+    .file-row-selected { background: #264f78; }
+    .line-add { background: #12261e; }
+    .line-del { background: #2d1318; }
+    .word-add { background: #1a4028; border-radius: 2px; }
+    .word-del { background: #4c1520; border-radius: 2px; }
+    .gutter { min-width: 48px; text-align: right; user-select: none; }
+    .commit-btn:hover { filter: brightness(1.1); }
+    .commit-btn:active { transform: scale(0.98); }
+  </style>
+</head>
+<body class="bg-base text-text-primary font-sans text-[13px] h-screen flex flex-col">
+
+  <!-- ==================== TITLE BAR ==================== -->
+  <div class="h-8 bg-surface border-b border-border flex items-center px-3 shrink-0 select-none" style="-webkit-app-region: drag;">
+    <div class="flex items-center gap-2">
+      <svg class="w-4 h-4 text-accent" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      <span class="text-text-secondary text-[11px] font-medium">DevTools</span>
+    </div>
+    <div class="ml-auto flex items-center gap-1" style="-webkit-app-region: no-drag;">
+      <button class="w-7 h-7 flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-elevated rounded">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button class="w-7 h-7 flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-elevated rounded">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+      </button>
+      <button class="w-7 h-7 flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-red/20 rounded">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== MAIN LAYOUT ==================== -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- ========== SIDEBAR ========== -->
+    <nav class="w-12 bg-surface border-r border-border flex flex-col items-center py-2 gap-1 shrink-0">
+      <!-- Terminal -->
+      <button class="w-10 h-10 flex items-center justify-center rounded text-text-secondary hover:text-text-primary hover:bg-elevated" title="Terminal (Ctrl+1)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><polyline points="4,17 10,11 4,5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      </button>
+      <!-- Git (active) -->
+      <button class="w-10 h-10 flex items-center justify-center rounded sidebar-item-active text-text-primary" title="Git (Ctrl+2)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+        <!-- Change badge -->
+        <span class="absolute -mt-6 ml-5 bg-accent text-base text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">5</span>
+      </button>
+      <div class="flex-1"></div>
+      <button class="w-10 h-10 flex items-center justify-center rounded text-text-secondary hover:text-text-primary hover:bg-elevated" title="Settings">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      </button>
+    </nav>
+
+    <!-- ========== GIT PANEL (left: file tree + commit) ========== -->
+    <div class="w-72 bg-surface border-r border-border flex flex-col shrink-0 overflow-hidden">
+
+      <!-- Branch selector -->
+      <div class="h-9 border-b border-border flex items-center px-3 gap-2 shrink-0">
+        <svg class="w-4 h-4 text-accent" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+        <span class="text-[12px] text-text-primary font-medium">main</span>
+        <svg class="w-3 h-3 text-text-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="6,9 12,15 18,9"/></svg>
+        <div class="ml-auto flex items-center gap-1">
+          <button class="w-6 h-6 flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-elevated rounded" title="Fetch">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.2-8.6"/><polyline points="21,3 21,9 15,9"/></svg>
+          </button>
+          <button class="w-6 h-6 flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-elevated rounded" title="Push">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5,12 12,5 19,12"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- File tree (scrollable) -->
+      <div class="flex-1 overflow-y-auto">
+
+        <!-- Staged Changes -->
+        <div class="border-b border-border-muted">
+          <div class="flex items-center px-3 py-1.5 text-[11px] font-medium text-text-secondary uppercase tracking-wider">
+            <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="6,9 12,15 18,9"/></svg>
+            Staged Changes
+            <span class="ml-auto bg-green/20 text-green text-[10px] font-bold px-1.5 rounded">2</span>
+          </div>
+          <!-- Staged files -->
+          <div class="file-row flex items-center px-3 py-1 gap-2 cursor-pointer" title="Unstage (U)">
+            <svg class="w-3.5 h-3.5 text-green shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20,6 9,17 4,12"/></svg>
+            <span class="text-[12px] text-text-primary truncate">src/renderer/pane-manager.ts</span>
+            <span class="ml-auto text-[10px] font-mono text-green font-bold shrink-0">M</span>
+          </div>
+          <div class="file-row flex items-center px-3 py-1 gap-2 cursor-pointer">
+            <svg class="w-3.5 h-3.5 text-green shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20,6 9,17 4,12"/></svg>
+            <span class="text-[12px] text-text-primary truncate">src/renderer/components/split-handle.tsx</span>
+            <span class="ml-auto text-[10px] font-mono text-green font-bold shrink-0">A</span>
+          </div>
+        </div>
+
+        <!-- Unstaged Changes -->
+        <div>
+          <div class="flex items-center px-3 py-1.5 text-[11px] font-medium text-text-secondary uppercase tracking-wider">
+            <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="6,9 12,15 18,9"/></svg>
+            Changes
+            <span class="ml-auto bg-yellow/20 text-yellow text-[10px] font-bold px-1.5 rounded">3</span>
+            <!-- Stage all button -->
+            <button class="ml-1.5 w-5 h-5 flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-elevated rounded" title="Stage all (Ctrl+Shift+A)">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+          <!-- Unstaged files -->
+          <div class="file-row file-row-selected flex items-center px-3 py-1 gap-2 cursor-pointer" title="Stage (S)">
+            <svg class="w-3.5 h-3.5 text-text-muted shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            <span class="text-[12px] text-text-primary truncate">src/renderer/terminal.tsx</span>
+            <span class="ml-auto text-[10px] font-mono text-yellow font-bold shrink-0">M</span>
+          </div>
+          <div class="file-row flex items-center px-3 py-1 gap-2 cursor-pointer">
+            <svg class="w-3.5 h-3.5 text-text-muted shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            <span class="text-[12px] text-text-primary truncate">src/main/session-store.ts</span>
+            <span class="ml-auto text-[10px] font-mono text-yellow font-bold shrink-0">M</span>
+          </div>
+          <div class="file-row flex items-center px-3 py-1 gap-2 cursor-pointer">
+            <svg class="w-3.5 h-3.5 text-text-muted shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            <span class="text-[12px] text-text-primary truncate">package.json</span>
+            <span class="ml-auto text-[10px] font-mono text-yellow font-bold shrink-0">M</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Commit interface -->
+      <div class="border-t border-border p-3 shrink-0">
+        <textarea
+          class="w-full bg-base border border-border rounded px-2.5 py-2 text-[12px] text-text-primary placeholder-text-muted resize-none focus:outline-none focus:border-accent"
+          rows="3"
+          placeholder="Commit message (Ctrl+Enter to commit)"
+        >feat: add split pane resize handles</textarea>
+        <div class="flex items-center gap-2 mt-2">
+          <button class="commit-btn flex-1 bg-accent text-base text-[12px] font-medium py-1.5 rounded flex items-center justify-center gap-1.5 transition-all">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20,6 9,17 4,12"/></svg>
+            Commit
+          </button>
+          <button class="w-8 h-8 flex items-center justify-center text-text-secondary hover:text-text-primary border border-border hover:bg-elevated rounded" title="Amend last commit">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== DIFF VIEWER (main area) ========== -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+
+      <!-- Diff toolbar -->
+      <div class="h-9 bg-surface border-b border-border flex items-center px-3 gap-3 shrink-0">
+        <span class="text-[12px] text-text-primary font-medium truncate">src/renderer/terminal.tsx</span>
+        <span class="text-[11px] text-text-muted">+24 / -8</span>
+        <div class="ml-auto flex items-center gap-1">
+          <!-- Inline / Split toggle -->
+          <div class="flex items-center bg-elevated rounded overflow-hidden border border-border-muted">
+            <button class="px-2.5 py-1 text-[10px] font-medium text-text-primary bg-accent/20 border-r border-border-muted">Inline</button>
+            <button class="px-2.5 py-1 text-[10px] font-medium text-text-secondary hover:text-text-primary">Split</button>
+          </div>
+          <button class="w-7 h-7 flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-elevated rounded" title="Copy diff">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <button class="w-7 h-7 flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-elevated rounded" title="Open file">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Diff content -->
+      <div class="flex-1 overflow-auto bg-base font-mono text-[12px] leading-[1.6]">
+
+        <!-- Hunk header -->
+        <div class="flex items-center bg-accent/5 border-y border-border-muted px-0">
+          <div class="gutter px-2 py-0.5 text-text-muted text-[11px] border-r border-border-muted">...</div>
+          <div class="gutter px-2 py-0.5 text-text-muted text-[11px] border-r border-border-muted">...</div>
+          <div class="px-3 py-0.5 text-accent text-[11px]">@@ -42,16 +42,32 @@ export function TerminalPane({ sessionId, isActive }: Props) {</div>
+        </div>
+
+        <!-- Context lines -->
+        <div class="flex hover:bg-elevated/30">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">42</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">42</div>
+          <div class="px-3 text-text-secondary">  const termRef = useRef&lt;HTMLDivElement&gt;(null);</div>
+        </div>
+        <div class="flex hover:bg-elevated/30">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">43</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">43</div>
+          <div class="px-3 text-text-secondary">  const xtermRef = useRef&lt;Terminal | null&gt;(null);</div>
+        </div>
+        <div class="flex hover:bg-elevated/30">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">44</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">44</div>
+          <div class="px-3 text-text-secondary">  const fitAddonRef = useRef&lt;FitAddon | null&gt;(null);</div>
+        </div>
+
+        <!-- Deleted lines -->
+        <div class="flex line-del">
+          <div class="gutter px-2 text-red/70 border-r border-border-muted">45</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="px-3 text-text-primary"><span class="text-red">-</span>  const [<span class="word-del">fontSize</span>] = useState(14);</div>
+        </div>
+        <div class="flex line-del">
+          <div class="gutter px-2 text-red/70 border-r border-border-muted">46</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="px-3 text-text-primary"><span class="text-red">-</span>  const [<span class="word-del">fontFamily</span>] = useState('monospace');</div>
+        </div>
+
+        <!-- Added lines -->
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">45</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>  const [<span class="word-add">config, setConfig</span>] = useState({</div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">46</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>    <span class="word-add">fontSize: 13,</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">47</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>    <span class="word-add">fontFamily: 'JetBrains Mono, monospace',</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">48</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>    <span class="word-add">cursorBlink: true,</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">49</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>    <span class="word-add">cursorStyle: 'block',</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">50</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>  });</div>
+        </div>
+
+        <!-- More context -->
+        <div class="flex hover:bg-elevated/30">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">47</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">51</div>
+          <div class="px-3 text-text-secondary"></div>
+        </div>
+
+        <!-- More additions -->
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">52</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>  <span class="word-add">// Handle pane resize events</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">53</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>  <span class="word-add">const handleResize = useCallback(() => {</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">54</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>    <span class="word-add">fitAddonRef.current?.fit();</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">55</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>  <span class="word-add">}, []);</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">56</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">57</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>  <span class="word-add">useEffect(() => {</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">58</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>    <span class="word-add">const observer = new ResizeObserver(handleResize);</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">59</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>    <span class="word-add">if (termRef.current) observer.observe(termRef.current);</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">60</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>    <span class="word-add">return () => observer.disconnect();</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">61</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>  <span class="word-add">}, [handleResize]);</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">62</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span></div>
+        </div>
+
+        <!-- Context lines -->
+        <div class="flex hover:bg-elevated/30">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">48</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">63</div>
+          <div class="px-3 text-text-secondary">  useEffect(() => {</div>
+        </div>
+        <div class="flex hover:bg-elevated/30">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">49</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">64</div>
+          <div class="px-3 text-text-secondary">    if (!termRef.current) return;</div>
+        </div>
+
+        <!-- Deletion -->
+        <div class="flex line-del">
+          <div class="gutter px-2 text-red/70 border-r border-border-muted">50</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="px-3 text-text-primary"><span class="text-red">-</span>    const term = new Terminal({ <span class="word-del">fontSize, fontFamily</span> });</div>
+        </div>
+        <!-- Addition -->
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">65</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>    const term = new Terminal({ <span class="word-add">...config</span> });</div>
+        </div>
+
+        <!-- More context -->
+        <div class="flex hover:bg-elevated/30">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">51</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">66</div>
+          <div class="px-3 text-text-secondary">    const fitAddon = new FitAddon();</div>
+        </div>
+        <div class="flex hover:bg-elevated/30">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">52</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">67</div>
+          <div class="px-3 text-text-secondary">    term.loadAddon(fitAddon);</div>
+        </div>
+        <div class="flex hover:bg-elevated/30">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">53</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">68</div>
+          <div class="px-3 text-text-secondary">    term.open(termRef.current);</div>
+        </div>
+
+        <!-- Deleted lines -->
+        <div class="flex line-del">
+          <div class="gutter px-2 text-red/70 border-r border-border-muted">54</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="px-3 text-text-primary"><span class="text-red">-</span>    <span class="word-del">fitAddon.fit();</span></div>
+        </div>
+        <div class="flex line-del">
+          <div class="gutter px-2 text-red/70 border-r border-border-muted">55</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="px-3 text-text-primary"><span class="text-red">-</span>    <span class="word-del">xtermRef.current = term;</span></div>
+        </div>
+        <div class="flex line-del">
+          <div class="gutter px-2 text-red/70 border-r border-border-muted">56</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="px-3 text-text-primary"><span class="text-red">-</span>    <span class="word-del">fitAddonRef.current = fitAddon;</span></div>
+        </div>
+
+        <!-- Added lines -->
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">69</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>    <span class="word-add">xtermRef.current = term;</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">70</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>    <span class="word-add">fitAddonRef.current = fitAddon;</span></div>
+        </div>
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">71</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>    <span class="word-add">fitAddon.fit();</span></div>
+        </div>
+
+        <!-- Context -->
+        <div class="flex hover:bg-elevated/30">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">57</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">72</div>
+          <div class="px-3 text-text-secondary"></div>
+        </div>
+        <div class="flex hover:bg-elevated/30">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">58</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">73</div>
+          <div class="px-3 text-text-secondary">    return () => term.dispose();</div>
+        </div>
+
+        <!-- Deleted -->
+        <div class="flex line-del">
+          <div class="gutter px-2 text-red/70 border-r border-border-muted">59</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="px-3 text-text-primary"><span class="text-red">-</span>  }, [<span class="word-del">fontSize, fontFamily</span>]);</div>
+        </div>
+        <!-- Added -->
+        <div class="flex line-add">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted"></div>
+          <div class="gutter px-2 text-green/70 border-r border-border-muted">74</div>
+          <div class="px-3 text-text-primary"><span class="text-green">+</span>  }, [<span class="word-add">config</span>]);</div>
+        </div>
+
+        <!-- Final context -->
+        <div class="flex hover:bg-elevated/30">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">60</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">75</div>
+          <div class="px-3 text-text-secondary"></div>
+        </div>
+        <div class="flex hover:bg-elevated/30">
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">61</div>
+          <div class="gutter px-2 text-text-muted border-r border-border-muted">76</div>
+          <div class="px-3 text-text-secondary">  return (</div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==================== STATUS BAR ==================== -->
+  <div class="h-6 bg-surface border-t border-border flex items-center px-3 text-[11px] shrink-0 select-none">
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5 text-text-secondary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <span class="text-text-primary">devtools</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5 text-text-secondary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+        <span class="text-accent">main</span>
+      </div>
+      <div class="flex items-center gap-1 text-text-secondary">
+        <span class="text-green">+24</span>
+        <span class="text-red">-8</span>
+        <span class="text-text-muted ml-1">5 files changed</span>
+      </div>
+    </div>
+    <div class="ml-auto flex items-center gap-3 text-text-muted">
+      <span><span class="kbd">S</span> stage</span>
+      <span><span class="kbd">U</span> unstage</span>
+      <span><span class="kbd">Ctrl+Enter</span> commit</span>
+    </div>
+  </div>
+
+  <!-- ==================== ANNOTATIONS ==================== -->
+  <!--
+    DESIGN ANNOTATIONS:
+    ===================================================================
+    LAYOUT:
+    - Title bar (32px): Electron custom frame
+    - Sidebar (48px): Icon-only, Git tab active (blue left border + change badge)
+    - Git panel (288px): Branch selector, staged/unstaged file lists, commit box
+    - Diff viewer (flex-1): Full-width inline diff with dual gutters
+
+    GIT PANEL:
+    - Branch selector: shows current branch with fetch/push actions
+    - Staged section: green checkmarks, collapsible, file status badges (M/A/D)
+    - Unstaged section: empty checkboxes, stage-all button, file status badges
+    - Selected file: blue highlight bg (selection color)
+    - Commit area: textarea (3 rows) + commit button + amend toggle
+
+    DIFF VIEWER:
+    - Toolbar: filename, change stats (+/-), inline/split toggle, actions
+    - Dual gutter: old line numbers (left), new line numbers (right)
+    - Deleted lines: red bg tint, red gutter numbers, word-level red highlight
+    - Added lines: green bg tint, green gutter numbers, word-level green highlight
+    - Context lines: default bg, secondary text color, hover highlight
+    - Hunk headers: blue tinted bg with @@ markers
+
+    FILE STATUS BADGES:
+    - M (Modified): yellow
+    - A (Added): green
+    - D (Deleted): red
+
+    KEYBOARD SHORTCUTS:
+    - S/U: stage/unstage files in git view
+    - Ctrl+Enter: commit from message box
+    - Ctrl+Shift+D: toggle diff mode
+    ===================================================================
+  -->
+</body>
+</html>

@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DevTools — Terminal View</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            base: '#1e1e2e',
+            mantle: '#181825',
+            crust: '#11111b',
+            surface: '#1e1e2e',
+            'surface-1': '#313244',
+            'surface-2': '#45475a',
+            overlay: '#585b70',
+            border: '#313244',
+            'border-muted': '#262637',
+            'text-primary': '#cdd6f4',
+            'text-secondary': '#a6adc8',
+            'text-muted': '#585b70',
+            accent: '#89b4fa',
+            teal: '#94e2d5',
+            green: '#a6e3a1',
+            red: '#f38ba8',
+            yellow: '#f9e2af',
+            peach: '#fab387',
+            mauve: '#cba6f7',
+            pink: '#f5c2e7',
+            sky: '#89dceb',
+            lavender: '#b4befe',
+            flamingo: '#f2cdcd',
+            rosewater: '#f5e0dc',
+            selection: '#45475a',
+          },
+          fontFamily: {
+            mono: ['Fira Code', 'JetBrains Mono', 'monospace'],
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1e1e2e; }
+    ::-webkit-scrollbar-thumb { background: #45475a; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #585b70; }
+    .drag-handle-v { cursor: col-resize; }
+    .drag-handle-h { cursor: row-resize; }
+    .drag-handle-v:hover, .drag-handle-h:hover { background: #89b4fa !important; }
+    .pane-active { box-shadow: inset 0 0 0 1px #89b4fa40; }
+    .terminal-cursor { animation: blink 1s step-end infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    .tab-active { border-bottom: 2px solid #89b4fa; background: #313244; }
+    .sidebar-item-active { border-left: 2px solid #89b4fa; background: #31324466; }
+    .kbd { font-family: 'Fira Code', monospace; font-size: 10px; background: #313244;
+           border: 1px solid #45475a; border-radius: 3px; padding: 1px 5px; color: #a6adc8; }
+    /* Fira Code ligatures */
+    .font-mono { font-feature-settings: "liga" 1, "calt" 1; }
+    /* Prompt powerline segment */
+    .prompt-segment { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 3px; }
+    /* Glow effect on active pane border */
+    .pane-active { box-shadow: inset 0 0 0 1px #89b4fa40, inset 0 0 12px #89b4fa08; }
+  </style>
+</head>
+<body class="bg-crust text-text-primary font-sans text-[13px] h-screen flex flex-col">
+
+  <!-- ==================== TITLE BAR ==================== -->
+  <div class="h-8 bg-mantle border-b border-border flex items-center px-3 shrink-0 select-none" style="-webkit-app-region: drag;">
+    <div class="flex items-center gap-2">
+      <svg class="w-4 h-4 text-mauve" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      <span class="text-text-secondary text-[11px] font-medium tracking-wide">DevTools</span>
+    </div>
+    <div class="ml-auto flex items-center gap-1" style="-webkit-app-region: no-drag;">
+      <button class="w-7 h-7 flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-1 rounded transition-colors">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button class="w-7 h-7 flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-1 rounded transition-colors">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+      </button>
+      <button class="w-7 h-7 flex items-center justify-center text-text-muted hover:text-red hover:bg-red/10 rounded transition-colors">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== MAIN LAYOUT ==================== -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- ========== SIDEBAR ========== -->
+    <nav class="w-12 bg-mantle border-r border-border flex flex-col items-center py-2 gap-1 shrink-0">
+      <button class="w-10 h-10 flex items-center justify-center rounded sidebar-item-active text-accent" title="Terminal (Ctrl+1)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><polyline points="4,17 10,11 4,5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      </button>
+      <button class="w-10 h-10 flex items-center justify-center rounded text-text-muted hover:text-text-primary hover:bg-surface-1 transition-colors" title="Git (Ctrl+2)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+      </button>
+      <div class="flex-1"></div>
+      <button class="w-10 h-10 flex items-center justify-center rounded text-text-muted hover:text-text-primary hover:bg-surface-1 transition-colors" title="Settings">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      </button>
+    </nav>
+
+    <!-- ========== MAIN CONTENT ========== -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+
+      <!-- ===== TAB BAR ===== -->
+      <div class="h-9 bg-mantle border-b border-border flex items-center shrink-0">
+        <div class="flex items-center gap-1.5 px-3 h-full border-r border-border">
+          <svg class="w-3.5 h-3.5 text-peach" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <span class="text-[12px] text-text-primary font-medium">devtools</span>
+          <svg class="w-3 h-3 text-text-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="6,9 12,15 18,9"/></svg>
+        </div>
+        <div class="flex items-end h-full">
+          <div class="tab-active flex items-center gap-1.5 px-3 h-full text-[12px] text-text-primary">
+            <span class="text-green text-[8px]">&#9679;</span> bash
+            <button class="ml-1 text-text-muted hover:text-text-primary"><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+          <div class="flex items-center gap-1.5 px-3 h-full text-[12px] text-text-muted hover:text-text-secondary hover:bg-surface-1/50 border-b-2 border-transparent transition-colors">
+            <span class="text-green text-[8px]">&#9679;</span> node
+          </div>
+          <div class="flex items-center gap-1.5 px-3 h-full text-[12px] text-text-muted hover:text-text-secondary hover:bg-surface-1/50 border-b-2 border-transparent transition-colors">
+            <span class="text-peach text-[8px]">&#9679;</span> ssh
+          </div>
+        </div>
+        <button class="w-9 h-full flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-1 transition-colors" title="New session (Ctrl+T)">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="flex-1"></div>
+        <div class="flex items-center gap-0.5 px-2">
+          <button class="w-7 h-7 flex items-center justify-center text-text-muted hover:text-accent hover:bg-surface-1 rounded transition-colors" title="Split horizontal">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+          </button>
+          <button class="w-7 h-7 flex items-center justify-center text-text-muted hover:text-accent hover:bg-surface-1 rounded transition-colors" title="Split vertical">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="12" x2="21" y2="12"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- ===== TERMINAL SPLIT PANES ===== -->
+      <div class="flex-1 flex overflow-hidden">
+
+        <!-- LEFT PANE (active) -->
+        <div class="flex-1 flex flex-col pane-active">
+          <div class="h-6 bg-surface-1/30 border-b border-border-muted flex items-center px-2 shrink-0">
+            <span class="text-[10px] text-text-muted font-mono">bash</span>
+            <span class="text-[10px] text-overlay mx-1">—</span>
+            <span class="text-[10px] text-teal font-mono">~/devtools</span>
+            <div class="ml-auto"><span class="text-[10px] text-text-muted">1/3</span></div>
+          </div>
+          <div class="flex-1 bg-base p-3 font-mono text-[13px] leading-[1.4] overflow-auto">
+            <!-- Starship-style prompt line 1 -->
+            <div class="flex items-center gap-1 mb-0.5">
+              <span class="prompt-segment bg-accent/15 text-accent text-[12px]">
+                <svg class="w-3 h-3 inline" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                devtools
+              </span>
+              <span class="prompt-segment bg-mauve/15 text-mauve text-[12px]">
+                <svg class="w-3 h-3 inline" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+                main
+              </span>
+              <span class="prompt-segment bg-green/15 text-green text-[12px]">✓</span>
+            </div>
+            <!-- Prompt line 2 -->
+            <div class="mb-2">
+              <span class="text-teal">❯</span> <span class="text-text-primary">npm run dev</span>
+            </div>
+            <!-- Output -->
+            <div class="text-text-secondary space-y-0.5">
+              <div class="text-text-muted text-[12px]">$ tauri dev</div>
+              <div class="mt-1"></div>
+              <div class="text-yellow">  VITE <span class="text-text-muted">v6.2.1</span>  <span class="text-green">ready in <span class="text-text-primary">342ms</span></span></div>
+              <div class="mt-0.5"></div>
+              <div>  <span class="text-text-muted">➜</span>  Local:   <span class="text-accent underline decoration-accent/30">http://localhost:1420/</span></div>
+              <div>  <span class="text-text-muted">➜</span>  Network: <span class="text-text-muted">use --host to expose</span></div>
+              <div class="mt-1"></div>
+              <div class="text-teal">  Info</span> Watching <span class="text-text-primary">/c/Users/Bug/Desktop/devtools/src-tauri</span> for changes...</div>
+              <div class="text-green mt-0.5">  Compiling devtools v0.1.0</div>
+              <div class="text-green">  Finished `dev` profile [unoptimized + debuginfo]</div>
+              <div class="text-text-muted text-[12px] mt-0.5">[14:39:12] Running `target/debug/devtools`</div>
+            </div>
+            <!-- New prompt -->
+            <div class="mt-3">
+              <div class="flex items-center gap-1 mb-0.5">
+                <span class="prompt-segment bg-accent/15 text-accent text-[12px]">
+                  <svg class="w-3 h-3 inline" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  devtools
+                </span>
+                <span class="prompt-segment bg-mauve/15 text-mauve text-[12px]">
+                  <svg class="w-3 h-3 inline" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+                  main
+                </span>
+                <span class="prompt-segment bg-green/15 text-green text-[12px]">✓</span>
+                <span class="text-text-muted text-[11px]">took 4s</span>
+              </div>
+              <div>
+                <span class="text-teal">❯</span> <span class="terminal-cursor inline-block w-[7px] h-[16px] bg-rosewater align-text-bottom rounded-[1px]"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- VERTICAL DRAG HANDLE -->
+        <div class="w-1 bg-border-muted drag-handle-v shrink-0 hover:bg-accent transition-colors"></div>
+
+        <!-- RIGHT COLUMN -->
+        <div class="flex flex-col" style="width: 45%;">
+
+          <!-- TOP-RIGHT PANE -->
+          <div class="flex-1 flex flex-col">
+            <div class="h-6 bg-surface-1/30 border-b border-border-muted flex items-center px-2 shrink-0">
+              <span class="text-[10px] text-text-muted font-mono">node</span>
+              <span class="text-[10px] text-overlay mx-1">—</span>
+              <span class="text-[10px] text-teal font-mono">~/devtools/server</span>
+              <div class="ml-auto"><span class="text-[10px] text-text-muted">2/3</span></div>
+            </div>
+            <div class="flex-1 bg-base p-3 font-mono text-[13px] leading-[1.4] overflow-auto">
+              <div class="flex items-center gap-1 mb-0.5">
+                <span class="prompt-segment bg-accent/15 text-accent text-[12px]">server</span>
+                <span class="prompt-segment bg-peach/15 text-peach text-[12px]">node v22</span>
+              </div>
+              <div class="mb-2"><span class="text-teal">❯</span> <span class="text-text-primary">node index.js</span></div>
+              <div class="text-text-secondary space-y-0.5">
+                <div>🚀 Server on port <span class="text-accent font-medium">3001</span></div>
+                <div class="mt-1 text-[12px]">
+                  <span class="text-text-muted">14:39:20</span> <span class="text-sky">GET</span> <span class="text-text-secondary">/api/health</span> <span class="text-green font-medium">200</span> <span class="text-text-muted">2ms</span>
+                </div>
+                <div class="text-[12px]">
+                  <span class="text-text-muted">14:39:21</span> <span class="text-sky">GET</span> <span class="text-text-secondary">/api/sessions</span> <span class="text-green font-medium">200</span> <span class="text-text-muted">15ms</span>
+                </div>
+                <div class="text-[12px]">
+                  <span class="text-text-muted">14:39:22</span> <span class="text-peach">POST</span> <span class="text-text-secondary">/api/terminal</span> <span class="text-green font-medium">201</span> <span class="text-text-muted">8ms</span>
+                </div>
+                <div class="text-[12px]">
+                  <span class="text-text-muted">14:39:25</span> <span class="text-mauve">WS</span> <span class="text-text-secondary">/ws/terminal</span> <span class="text-teal">↔ connected</span>
+                </div>
+              </div>
+              <div class="mt-2">
+                <span class="terminal-cursor inline-block w-[7px] h-[16px] bg-rosewater align-text-bottom rounded-[1px]"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- HORIZONTAL DRAG HANDLE -->
+          <div class="h-1 bg-border-muted drag-handle-h shrink-0 hover:bg-accent transition-colors"></div>
+
+          <!-- BOTTOM-RIGHT PANE -->
+          <div class="flex-1 flex flex-col">
+            <div class="h-6 bg-surface-1/30 border-b border-border-muted flex items-center px-2 shrink-0">
+              <span class="text-[10px] text-text-muted font-mono">bash</span>
+              <span class="text-[10px] text-overlay mx-1">—</span>
+              <span class="text-[10px] text-teal font-mono">~/devtools</span>
+              <div class="ml-auto"><span class="text-[10px] text-text-muted">3/3</span></div>
+            </div>
+            <div class="flex-1 bg-base p-3 font-mono text-[13px] leading-[1.4] overflow-auto">
+              <div class="flex items-center gap-1 mb-0.5">
+                <span class="prompt-segment bg-accent/15 text-accent text-[12px]">devtools</span>
+                <span class="prompt-segment bg-mauve/15 text-mauve text-[12px]">main</span>
+              </div>
+              <div class="mb-2"><span class="text-teal">❯</span> <span class="text-text-primary">git log --oneline -5</span></div>
+              <div class="text-text-secondary space-y-0.5">
+                <div><span class="text-yellow">a3f9c21</span> <span class="text-text-primary">feat: add split pane resize handles</span> <span class="text-mauve text-[11px]">(2h ago)</span></div>
+                <div><span class="text-yellow">b7e2d45</span> <span class="text-text-primary">fix: terminal cursor blink timing</span> <span class="text-mauve text-[11px]">(3h ago)</span></div>
+                <div><span class="text-yellow">c1a8f67</span> <span class="text-text-primary">refactor: extract pane manager module</span> <span class="text-mauve text-[11px]">(5h ago)</span></div>
+                <div><span class="text-yellow">d5b3e89</span> <span class="text-text-primary">feat: session persistence per project</span> <span class="text-mauve text-[11px]">(1d ago)</span></div>
+                <div><span class="text-yellow">e9f4a12</span> <span class="text-text-primary">chore: init tauri v2 project</span> <span class="text-mauve text-[11px]">(2d ago)</span></div>
+              </div>
+              <div class="mt-3">
+                <div class="flex items-center gap-1 mb-0.5">
+                  <span class="prompt-segment bg-accent/15 text-accent text-[12px]">devtools</span>
+                  <span class="prompt-segment bg-mauve/15 text-mauve text-[12px]">main</span>
+                  <span class="prompt-segment bg-green/15 text-green text-[12px]">✓</span>
+                </div>
+                <div><span class="text-teal">❯</span> <span class="terminal-cursor inline-block w-[7px] h-[16px] bg-rosewater align-text-bottom rounded-[1px]"></span></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ===== STATUS BAR ===== -->
+      <div class="h-6 bg-mantle border-t border-border flex items-center px-3 text-[11px] shrink-0 select-none">
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-1.5">
+            <span class="text-peach">&#9679;</span>
+            <span class="text-text-primary font-medium">devtools</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <svg class="w-3 h-3 text-mauve" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+            <span class="text-mauve">main</span>
+          </div>
+          <div class="flex items-center gap-1 text-text-secondary">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><polyline points="4,17 10,11 4,5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            <span>3 sessions</span>
+          </div>
+        </div>
+        <div class="ml-auto flex items-center gap-3 text-text-muted">
+          <span><span class="kbd">Ctrl+\\</span> split</span>
+          <span><span class="kbd">Ctrl+Tab</span> pane</span>
+          <span><span class="kbd">Ctrl+T</span> new</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>
