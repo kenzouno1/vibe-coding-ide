@@ -66,7 +66,13 @@ export const SshAgentTerminal = memo(function SshAgentTerminal() {
       fitAddon.fit();
       resize(term.rows, term.cols);
       // Auto-cd to agent workspace where CLAUDE.md lives
-      write("cd ~/.devtools/agent-workspace && clear\r");
+      // Detect OS: cmd.exe uses %USERPROFILE%, bash/zsh uses ~
+      const isWindows = navigator.platform.startsWith("Win");
+      if (isWindows) {
+        write("cd /d %USERPROFILE%\\.devtools\\agent-workspace && cls\r");
+      } else {
+        write("cd ~/.devtools/agent-workspace && clear\r");
+      }
     }, 800);
 
     const resizeObserver = new ResizeObserver(() => {
