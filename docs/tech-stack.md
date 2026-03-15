@@ -10,6 +10,12 @@
 - **portable-pty (Rust)** — PTY backend (conpty on Windows)
 - **Custom split layout** — Flex-based binary tree pane manager
 
+## Code Editor
+- **Monaco Editor** — VS Code's editor, syntax highlighting, multi-language support
+- **@monaco-editor/react** — React wrapper for Monaco
+- **Catppuccin Mocha** — Custom theme applied to editor instance
+- **Language Detection** — Auto-detect language from file extension
+
 ## Git Integration
 - **git CLI** — Shell out to OS git (reuse existing tool)
 - **diff2html** — Diff rendering (inline + side-by-side)
@@ -21,6 +27,11 @@
 ## Styling
 - **Tailwind CSS** — Utility-first styling
 - **shadcn/ui** — Accessible component primitives
+
+## File Operations
+- **file_ops.rs** (Rust) — Read/write files with path traversal protection
+- **Tauri invoke** — IPC for `read_file` and `write_file` commands
+- **Editor file I/O** — Async file operations from store actions
 
 ## Build & Package
 - **Tauri bundler** — .msi (Windows), .dmg (macOS), .deb/.AppImage (Linux)

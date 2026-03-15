@@ -79,6 +79,13 @@ Base unit: 4px. Scale: 0/1/2/3/4/5/6/8/10/12/16 (multiply by 4px).
 - Commit button: `accent-blue` bg, `text-primary`, full-width below textarea
 - Staged/unstaged: collapsible file lists with checkbox-style staging
 
+### Editor View
+- Two-pane layout: File explorer (left, resizable) + Editor area (right)
+- File explorer: Hierarchical tree with file icons, 150-500px width, click to open
+- Tab bar: Horizontal tabs above editor, shows filename + dot indicator for unsaved changes
+- Editor: Monaco Editor with Catppuccin Mocha theme, syntax highlighting per language
+- Empty state: Large file icon with "Open a file from the explorer" message
+
 ### Status Bar
 - Full-width bottom bar, `bg-surface`, `border-t border-default`
 - Left: project name + branch (with git icon)
@@ -95,17 +102,22 @@ Base unit: 4px. Scale: 0/1/2/3/4/5/6/8/10/12/16 (multiply by 4px).
 
 | Action | Shortcut |
 |--------|----------|
-| Split horizontal | `Ctrl+Shift+H` |
-| Split vertical | `Ctrl+Shift+V` |
-| Close pane | `Ctrl+Shift+W` |
-| Next pane | `Ctrl+Tab` |
-| Toggle sidebar | `Ctrl+B` |
 | Switch to Terminal | `Ctrl+1` |
 | Switch to Git | `Ctrl+2` |
-| Stage file | `S` (in git view) |
-| Unstage file | `U` (in git view) |
+| Switch to Editor | `Ctrl+3` |
+| Next project tab | `Ctrl+Tab` |
+| Previous project tab | `Ctrl+Shift+Tab` |
+| **Terminal View** | |
+| Split horizontal | `Ctrl+Shift+H` |
+| Split vertical | `Ctrl+Shift+V` |
+| Close pane | `Ctrl+W` |
+| **Editor View** | |
+| Save file | `Ctrl+S` |
+| Close file | `Ctrl+W` |
+| **Git View** | |
 | Commit | `Ctrl+Enter` (in commit box) |
-| Toggle diff mode | `Ctrl+Shift+D` |
+| Stage file | `S` (with file selected) |
+| Unstage file | `U` (with file selected) |
 
 ## Responsive Behavior
 
