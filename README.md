@@ -2,6 +2,8 @@
 
 **Lightweight dev environment for vibe coders.**
 
+English | [Tiếng Việt](README.vi.md)
+
 Modern IDEs ship with hundreds of features — debuggers, profilers, refactoring wizards, database explorers, extension ecosystems, remote containers, and more. Most vibe coders never touch 90% of them. What they actually need is a terminal, a way to see their changes, and quick access to git. Everything else is noise.
 
 DevTools strips away the bloat and keeps only what matters:
@@ -69,4 +71,4 @@ src-tauri/              # Rust backend
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE) for details.
