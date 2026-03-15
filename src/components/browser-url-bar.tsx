@@ -84,13 +84,14 @@ export function BrowserUrlBar({ projectPath }: BrowserUrlBarProps) {
     }
   }, [projectPath]);
 
-  const captureScreenshot = useCallback(async () => {
-    try {
-      await invoke("capture_browser_screenshot", { projectId: projectPath });
-    } catch (err) {
-      console.error("Screenshot failed:", err);
-    }
-  }, [projectPath]);
+  const openAnnotation = useBrowserStore((s) => s.openAnnotation);
+
+  const captureScreenshot = useCallback(() => {
+    // Open annotation canvas immediately (blank or with screenshot if capture succeeds)
+    openAnnotation(projectPath, "");
+    // Try async capture — if successful, browser-screenshot-captured event updates background
+    invoke("capture_browser_screenshot", { projectId: projectPath }).catch(() => {});
+  }, [projectPath, openAnnotation]);
 
   return (
     <div className="flex items-center gap-1 px-2 py-1.5 bg-ctp-mantle border-b border-ctp-surface0">

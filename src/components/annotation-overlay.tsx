@@ -109,7 +109,43 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
       }
     };
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+
+    // Paste image from clipboard (Ctrl+V or Win+Shift+S → paste)
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith("image/")) {
+          const blob = items[i].getAsFile();
+          if (!blob) continue;
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = reader.result as string;
+            const img = new window.Image();
+            img.onload = () => {
+              setBgImage(img);
+              if (containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                const scale = Math.min(rect.width / img.width, rect.height / img.height, 1);
+                setStageSize({
+                  width: Math.round(img.width * scale),
+                  height: Math.round(img.height * scale),
+                });
+              }
+            };
+            img.src = dataUrl;
+          };
+          reader.readAsDataURL(blob);
+          break;
+        }
+      }
+    };
+    window.addEventListener("paste", handlePaste);
+
+    return () => {
+      window.removeEventListener("keydown", handler);
+      window.removeEventListener("paste", handlePaste);
+    };
   }, [undo, redo, closeAnnotation, projectPath, textInput]);
 
   // Commit text input
