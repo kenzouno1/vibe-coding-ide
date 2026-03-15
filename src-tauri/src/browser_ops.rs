@@ -112,6 +112,58 @@ const CONSOLE_BRIDGE_SCRIPT: &str = r#"
       }
     }
   });
+
+  // Custom right-click context menu with "Send to AI Terminal"
+  var ctxMenu = null;
+  function removeCtxMenu() {
+    if (ctxMenu && ctxMenu.parentNode) ctxMenu.parentNode.removeChild(ctxMenu);
+    ctxMenu = null;
+  }
+
+  document.addEventListener('contextmenu', function(ev) {
+    var sel = window.getSelection();
+    var text = sel ? sel.toString().trim() : '';
+    // Get element text if nothing selected
+    if (!text && ev.target) {
+      text = (ev.target.textContent || '').trim().substring(0, 500);
+    }
+    if (!text) return;
+
+    ev.preventDefault();
+    removeCtxMenu();
+
+    ctxMenu = document.createElement('div');
+    ctxMenu.style.cssText = 'position:fixed;z-index:999999;background:#1e1e2e;border:1px solid #45475a;border-radius:6px;padding:4px 0;box-shadow:0 4px 12px rgba(0,0,0,0.4);font-family:system-ui,sans-serif;font-size:13px;min-width:200px;';
+    ctxMenu.style.left = ev.clientX + 'px';
+    ctxMenu.style.top = ev.clientY + 'px';
+
+    function addItem(label, icon, callback) {
+      var item = document.createElement('div');
+      item.style.cssText = 'padding:6px 12px;color:#cdd6f4;cursor:pointer;display:flex;align-items:center;gap:8px;';
+      item.onmouseover = function() { item.style.background = '#313244'; };
+      item.onmouseout = function() { item.style.background = 'transparent'; };
+      item.innerHTML = '<span style="opacity:0.6;font-size:14px;">' + icon + '</span><span>' + label + '</span>';
+      item.onclick = function() { removeCtxMenu(); callback(); };
+      ctxMenu.appendChild(item);
+    }
+
+    addItem('Send to AI Terminal', '&#9654;', function() {
+      window.__DEVTOOLS_SEND_TO_TERMINAL__ = text;
+    });
+
+    addItem('Copy', '&#128203;', function() {
+      navigator.clipboard.writeText(text).catch(function(){});
+    });
+
+    // Clamp to viewport
+    document.body.appendChild(ctxMenu);
+    var rect = ctxMenu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) ctxMenu.style.left = (window.innerWidth - rect.width - 8) + 'px';
+    if (rect.bottom > window.innerHeight) ctxMenu.style.top = (window.innerHeight - rect.height - 8) + 'px';
+  });
+
+  document.addEventListener('click', removeCtxMenu);
+  document.addEventListener('scroll', removeCtxMenu, true);
 })();
 "#;
 
@@ -217,6 +269,20 @@ pub async fn create_browser_webview(
             // Debug: log all title changes
             log::info!("[browser] title changed: {}", &title[..title.len().min(100)]);
 
+            // Intercept "Send to AI Terminal" from context menu
+            if title.starts_with("__DEVTOOLS_SEND__") {
+                let text = &title["__DEVTOOLS_SEND__".len()..];
+                let _ = app_for_title.emit(
+                    "browser-selection",
+                    serde_json::json!({
+                        "label": label_for_title,
+                        "text": text,
+                        "url": "",
+                    }),
+                );
+                return;
+            }
+
             // Intercept console log flush signal from polling thread
             // Format: __DEVTOOLS_FLUSH_{counter}__[json array]
             if title.starts_with("__DEVTOOLS_FLUSH_") {
@@ -278,14 +344,20 @@ pub async fn create_browser_webview(
             };
 
             counter += 1;
-            // Use counter in title to ensure each flush triggers on_document_title_changed
-            // Store real title, set flush title, then restore after a short delay
+            // Flush logs AND "send to terminal" request via title signaling
             let signal_script = format!(
                 r#"(function(){{
+                    var real = document.title;
+                    var sendText = window.__DEVTOOLS_SEND_TO_TERMINAL__;
+                    if (sendText) {{
+                        window.__DEVTOOLS_SEND_TO_TERMINAL__ = null;
+                        document.title = '__DEVTOOLS_SEND__' + sendText;
+                        setTimeout(function(){{ document.title = real; }}, 100);
+                        return;
+                    }}
                     var logs = window.__DEVTOOLS_LOGS__;
                     if (!logs || logs.length === 0) return;
                     window.__DEVTOOLS_LOGS__ = [];
-                    var real = document.title;
                     document.title = '__DEVTOOLS_FLUSH_{counter}__' + JSON.stringify(logs);
                     setTimeout(function(){{ document.title = real; }}, 100);
                 }})()"#,
