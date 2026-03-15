@@ -75,10 +75,12 @@ const ConsoleLogEntry = memo(function ConsoleLogEntry({ log, onSend }: ConsoleLo
 
 interface BrowserConsolePanelProps {
   projectPath: string;
+  onOpenFeedback?: () => void;
 }
 
 export const BrowserConsolePanel = memo(function BrowserConsolePanel({
   projectPath,
+  onOpenFeedback,
 }: BrowserConsolePanelProps) {
   const browserState = useBrowserStore((s) => s.getState(projectPath));
   const clearLogs = useBrowserStore((s) => s.clearLogs);
@@ -194,6 +196,18 @@ export const BrowserConsolePanel = memo(function BrowserConsolePanel({
           >
             <Send size={10} />
             <span>Send Errors</span>
+          </button>
+        )}
+
+        {/* Quick feedback button */}
+        {consolePanelOpen && onOpenFeedback && (
+          <button
+            onClick={onOpenFeedback}
+            className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded hover:bg-ctp-surface0 text-ctp-overlay1 hover:text-ctp-green transition-colors"
+            title="Send feedback to terminal"
+          >
+            <Send size={10} />
+            <span>Feedback</span>
           </button>
         )}
 

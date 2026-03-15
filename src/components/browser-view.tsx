@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, memo } from "react";
+import { useEffect, useRef, useCallback, useState, memo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "@/stores/app-store";
@@ -8,6 +8,7 @@ import { usePaneStore } from "@/stores/pane-store";
 import { BrowserUrlBar } from "@/components/browser-url-bar";
 import { BrowserConsolePanel } from "@/components/browser-console-panel";
 import { AnnotationOverlay } from "@/components/annotation-overlay";
+import { FeedbackComposer } from "@/components/feedback-composer";
 import { useServerDetect } from "@/hooks/use-server-detect";
 
 interface BrowserViewProps {
@@ -22,6 +23,7 @@ export const BrowserView = memo(function BrowserView({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   // Guard against double webview creation from rapid view toggles
   const creatingRef = useRef(false);
 
@@ -224,11 +226,15 @@ export const BrowserView = memo(function BrowserView({
       </div>
       {/* Console panel — shows captured console logs from embedded browser */}
       {browserState.webviewCreated && (
-        <BrowserConsolePanel projectPath={projectPath} />
+        <BrowserConsolePanel projectPath={projectPath} onOpenFeedback={() => setFeedbackOpen(true)} />
       )}
       {/* Annotation overlay — full-screen canvas over the browser view */}
       {browserState.annotationOpen && browserState.screenshotData && (
         <AnnotationOverlay projectPath={projectPath} />
+      )}
+      {/* Feedback composer modal */}
+      {feedbackOpen && (
+        <FeedbackComposer projectPath={projectPath} onClose={() => setFeedbackOpen(false)} />
       )}
     </div>
   );
