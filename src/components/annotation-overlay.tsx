@@ -347,7 +347,7 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
   const hasScreenshot = !!bgImage;
 
   return (
-    <div className="absolute inset-0 z-50 flex flex-col bg-ctp-crust">
+    <div className="fixed inset-0 z-50 flex flex-col bg-ctp-crust">
       <AnnotationToolbar
         projectPath={projectPath}
         onUndo={undo}
