@@ -324,53 +324,45 @@ pub async fn create_browser_webview(
         )
         .map_err(|e| format!("Failed to create webview: {e}"))?;
 
-    // Start a polling thread to flush console logs from the child webview.
-    // This is necessary because external URLs can't use Tauri IPC (invoke) —
-    // the JS bridge stores logs in window.__DEVTOOLS_LOGS__ and we eval() to retrieve them.
-    // Start polling thread: flush console logs from child webview every 500ms.
-    // JS bridge stores logs in window.__DEVTOOLS_LOGS__. Polling thread eval()s
-    // JS that sets document.title to "__DEVTOOLS_FLUSH__<json>", which triggers
-    // on_document_title_changed to emit browser-console events.
-    let poll_app = app.clone();
-    let poll_label = label;
-    std::thread::spawn(move || {
-        let mut counter: u64 = 0;
-        loop {
-            std::thread::sleep(std::time::Duration::from_millis(500));
-
-            let webview = match poll_app.get_webview(&poll_label) {
-                Some(w) => w,
-                None => break,
-            };
-
-            counter += 1;
-            // Flush logs AND "send to terminal" request via title signaling
-            let signal_script = format!(
-                r#"(function(){{
-                    var real = document.title;
-                    var sendText = window.__DEVTOOLS_SEND_TO_TERMINAL__;
-                    if (sendText) {{
-                        window.__DEVTOOLS_SEND_TO_TERMINAL__ = null;
-                        document.title = '__DEVTOOLS_SEND__' + sendText;
-                        setTimeout(function(){{ document.title = real; }}, 100);
-                        return;
-                    }}
-                    var logs = window.__DEVTOOLS_LOGS__;
-                    if (!logs || logs.length === 0) return;
-                    window.__DEVTOOLS_LOGS__ = [];
-                    document.title = '__DEVTOOLS_FLUSH_{counter}__' + JSON.stringify(logs);
-                    setTimeout(function(){{ document.title = real; }}, 100);
-                }})()"#,
-                counter = counter
-            );
-
-            if webview.eval(&signal_script).is_err() {
-                break;
-            }
-        }
-    });
-
     Ok(())
+}
+
+/// Flush buffered console logs and "send to terminal" requests from child webview.
+/// Called by the frontend on a setInterval (every 500ms).
+/// Uses eval() + document.title signaling since external URLs can't use Tauri IPC.
+/// MUST run on the main thread (Tauri commands do) — WebView2 eval() crashes from bg threads.
+#[tauri::command]
+pub async fn flush_browser_logs(
+    app: tauri::AppHandle,
+    project_id: String,
+    counter: u64,
+) -> Result<(), String> {
+    let label = webview_label(&project_id);
+    let webview = match app.get_webview(&label) {
+        Some(w) => w,
+        None => return Ok(()), // webview not created yet
+    };
+
+    let signal_script = format!(
+        r#"(function(){{
+            var real = document.title;
+            var sendText = window.__DEVTOOLS_SEND_TO_TERMINAL__;
+            if (sendText) {{
+                window.__DEVTOOLS_SEND_TO_TERMINAL__ = null;
+                document.title = '__DEVTOOLS_SEND__' + sendText;
+                setTimeout(function(){{ document.title = real; }}, 100);
+                return;
+            }}
+            var logs = window.__DEVTOOLS_LOGS__;
+            if (!logs || logs.length === 0) return;
+            window.__DEVTOOLS_LOGS__ = [];
+            document.title = '__DEVTOOLS_FLUSH_{counter}__' + JSON.stringify(logs);
+            setTimeout(function(){{ document.title = real; }}, 100);
+        }})()"#,
+        counter = counter
+    );
+
+    webview.eval(&signal_script).map_err(|e| e.to_string())
 }
 
 /// Relay console log from child webview to main app event bus.

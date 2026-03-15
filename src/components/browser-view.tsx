@@ -116,6 +116,21 @@ export const BrowserView = memo(function BrowserView({
     };
   }, [projectPath, browserState.webviewCreated, syncBounds]);
 
+  // Poll console logs from child webview every 500ms
+  // Must be called from main thread (Tauri command) — WebView2 eval() crashes from bg threads
+  useEffect(() => {
+    if (!browserState.webviewCreated) return;
+    let counter = 0;
+    const interval = setInterval(() => {
+      counter++;
+      invoke("flush_browser_logs", {
+        projectId: projectPath,
+        counter,
+      }).catch(() => {});
+    }, 500);
+    return () => clearInterval(interval);
+  }, [projectPath, browserState.webviewCreated]);
+
   // Listen for browser events from Rust — filter by webview label
   useEffect(() => {
     const unlisteners: Promise<() => void>[] = [];
