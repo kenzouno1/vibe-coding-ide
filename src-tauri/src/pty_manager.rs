@@ -6,6 +6,20 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use tauri::{AppHandle, Emitter};
 
+/// Split byte slice at the last valid UTF-8 boundary.
+/// Returns (valid_utf8_bytes, incomplete_trailing_bytes).
+/// Prevents multi-byte characters (Vietnamese, CJK) from being corrupted
+/// when split across read buffer boundaries.
+fn split_at_utf8_boundary(bytes: &[u8]) -> (&[u8], &[u8]) {
+    match std::str::from_utf8(bytes) {
+        Ok(_) => (bytes, &[]),
+        Err(e) => {
+            let valid_up_to = e.valid_up_to();
+            (&bytes[..valid_up_to], &bytes[valid_up_to..])
+        }
+    }
+}
+
 /// Holds a PTY master handle and its writer
 struct PtySession {
     writer: Box<dyn Write + Send>,
@@ -93,23 +107,55 @@ pub fn spawn_pty(
         );
     }
 
-    // Spawn reader thread to stream PTY output to frontend
+    // Spawn reader thread to stream PTY output to frontend.
+    // Uses UTF-8 safe buffering to avoid corrupting multi-byte characters
+    // (Vietnamese, CJK, etc.) that may be split across read boundaries.
     let session_id = id.clone();
     thread::spawn(move || {
         let mut buf = [0u8; 4096];
+        let mut leftover = Vec::new();
         loop {
             match reader.read(&mut buf) {
-                Ok(0) => break, // EOF
+                Ok(0) => break,
                 Ok(n) => {
-                    // Convert bytes to string, replacing invalid UTF-8
-                    let data = String::from_utf8_lossy(&buf[..n]).to_string();
-                    let _ = app.emit(
-                        "pty-output",
-                        PtyOutput {
-                            id: session_id.clone(),
-                            data,
-                        },
-                    );
+                    // Prepend any leftover bytes from previous read
+                    let chunk = if leftover.is_empty() {
+                        &buf[..n]
+                    } else {
+                        leftover.extend_from_slice(&buf[..n]);
+                        leftover.as_slice()
+                    };
+
+                    // Find the last valid UTF-8 boundary
+                    let (valid, remainder) = split_at_utf8_boundary(chunk);
+                    if !valid.is_empty() {
+                        // split_at_utf8_boundary guarantees valid UTF-8
+                        let data = std::str::from_utf8(valid).unwrap().to_string();
+                        let _ = app.emit(
+                            "pty-output",
+                            PtyOutput {
+                                id: session_id.clone(),
+                                data,
+                            },
+                        );
+                    }
+
+                    // Keep incomplete trailing bytes for next read.
+                    // Safety valve: max UTF-8 char is 4 bytes. If leftover exceeds
+                    // that, we have genuinely invalid data (binary output) — flush
+                    // with lossy conversion to avoid unbounded memory growth.
+                    leftover = remainder.to_vec();
+                    if leftover.len() > 4 {
+                        let data = String::from_utf8_lossy(&leftover).to_string();
+                        let _ = app.emit(
+                            "pty-output",
+                            PtyOutput {
+                                id: session_id.clone(),
+                                data,
+                            },
+                        );
+                        leftover.clear();
+                    }
                 }
                 Err(_) => break,
             }

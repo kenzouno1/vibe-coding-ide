@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { usePaneStore } from "@/stores/pane-store";
 import { useGitStore } from "@/stores/git-store";
+import { useEditorStore } from "@/stores/editor-store";
 
 const STORAGE_KEY_TABS = "devtools-open-tabs";
 const STORAGE_KEY_ACTIVE = "devtools-active-tab";
@@ -147,6 +148,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     // Clean up per-project state in other stores
     usePaneStore.getState().removeProject(path);
     useGitStore.getState().removeProject(path);
+    useEditorStore.getState().removeProject(path);
 
     saveTabs(newTabs);
     saveActive(newActive);

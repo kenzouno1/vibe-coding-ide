@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { SplitPaneContainer } from "@/components/split-pane-container";
 import { GitPanel } from "@/components/git-panel";
+import { EditorView } from "@/components/editor-view";
 import { Sidebar } from "@/components/sidebar";
 import { StatusBar } from "@/components/status-bar";
 import { TabBar } from "@/components/tab-bar";
@@ -68,6 +69,16 @@ export function App() {
                   }}
                 >
                   <GitPanel projectPath={tab.path} />
+                </div>
+                {/* Editor view */}
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    visibility: view === "editor" ? "visible" : "hidden",
+                    zIndex: view === "editor" ? 1 : 0,
+                  }}
+                >
+                  <EditorView projectPath={tab.path} />
                 </div>
               </div>
             );

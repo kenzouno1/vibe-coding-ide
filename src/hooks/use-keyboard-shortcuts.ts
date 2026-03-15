@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useAppStore } from "@/stores/app-store";
 import { usePaneStore } from "@/stores/pane-store";
 import { useGitStore } from "@/stores/git-store";
+import { useEditorStore } from "@/stores/editor-store";
 import { useProjectStore } from "@/stores/project-store";
 
 /**
@@ -24,6 +25,9 @@ export function useKeyboardShortcuts() {
   const gitStageFile = useGitStore((s) => s.stageFile);
   const gitUnstageFile = useGitStore((s) => s.unstageFile);
 
+  const editorGetState = useEditorStore((s) => s.getState);
+  const editorCloseFile = useEditorStore((s) => s.closeFile);
+
   useEffect(() => {
     function handler(e: KeyboardEvent) {
       const isCtrl = e.ctrlKey || e.metaKey;
@@ -39,6 +43,11 @@ export function useKeyboardShortcuts() {
       if (isCtrl && e.key === "2") {
         e.preventDefault();
         setView("git");
+        return;
+      }
+      if (isCtrl && e.key === "3") {
+        e.preventDefault();
+        setView("editor");
         return;
       }
 
@@ -75,6 +84,33 @@ export function useKeyboardShortcuts() {
         }
       }
 
+      // Editor shortcuts (only in editor view)
+      if (view === "editor") {
+        if (isCtrl && e.key === "s") {
+          e.preventDefault();
+          const editorState = editorGetState(project);
+          if (editorState.activeFilePath) {
+            // Get content from Monaco model via DOM (editor instance manages the content)
+            const activeFile = editorState.openFiles.find(
+              (f) => f.filePath === editorState.activeFilePath,
+            );
+            if (activeFile) {
+              // Dispatch a custom event that editor-pane listens for
+              window.dispatchEvent(new CustomEvent("devtools:save-active-file"));
+            }
+          }
+          return;
+        }
+        if (isCtrl && e.key === "w") {
+          e.preventDefault();
+          const editorState = editorGetState(project);
+          if (editorState.activeFilePath) {
+            editorCloseFile(project, editorState.activeFilePath);
+          }
+          return;
+        }
+      }
+
       // Git shortcuts (only in git view)
       if (view === "git") {
         if (isCtrl && e.key === "Enter") {
@@ -103,5 +139,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [view, activeTabPath, openTabs, setView, setActiveTab, split, closePane, getActiveId, gitCommit, gitGetState, gitStageFile, gitUnstageFile]);
+  }, [view, activeTabPath, openTabs, setView, setActiveTab, split, closePane, getActiveId, gitCommit, gitGetState, gitStageFile, gitUnstageFile, editorGetState, editorCloseFile]);
 }

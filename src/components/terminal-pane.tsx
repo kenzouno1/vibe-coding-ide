@@ -3,6 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { usePty } from "@/hooks/use-pty";
+import { setupImeHandler } from "@/hooks/use-ime-handler";
 import { useAppStore } from "@/stores/app-store";
 import { useProjectStore } from "@/stores/project-store";
 
@@ -96,10 +97,23 @@ export const TerminalPane = memo(function TerminalPane({
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    term.onData((data) => write(data));
+    // Setup IME composition handler — intercepts Vietnamese IME input
+    // (backspace-replace method) and sends composed text to PTY correctly.
+    const { state: imeState, cleanup: imeCleanup } = setupImeHandler(
+      containerRef.current,
+      write
+    );
 
-    // Handle paste (Ctrl+V) and copy (Ctrl+C)
+    // Send terminal data to PTY, but skip during IME composition
+    // (composed text is sent via compositionend handler instead)
+    term.onData((data) => {
+      if (!imeState.composing) write(data);
+    });
+
+    // Handle paste (Ctrl+V), copy (Ctrl+C), and block keys during IME
     term.attachCustomKeyEventHandler((e) => {
+      // Block xterm key processing during IME composition
+      if (imeState.composing) return false;
       if (e.type === "keydown" && e.ctrlKey && e.key === "v") {
         handlePaste(write);
         return false;
@@ -130,6 +144,7 @@ export const TerminalPane = memo(function TerminalPane({
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      imeCleanup();
       resizeObserver.disconnect();
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
       term.dispose();

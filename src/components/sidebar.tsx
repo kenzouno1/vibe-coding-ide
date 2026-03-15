@@ -1,9 +1,10 @@
-import { Terminal, GitBranch } from "lucide-react";
+import { Terminal, GitBranch, Code } from "lucide-react";
 import { useAppStore, type AppView } from "@/stores/app-store";
 
 const NAV_ITEMS: { view: AppView; icon: typeof Terminal; label: string }[] = [
   { view: "terminal", icon: Terminal, label: "Terminal" },
   { view: "git", icon: GitBranch, label: "Git" },
+  { view: "editor", icon: Code, label: "Editor" },
 ];
 
 export function Sidebar() {

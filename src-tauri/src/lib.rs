@@ -1,9 +1,12 @@
 mod clipboard_helper;
+mod file_ops;
 mod git_ops;
+mod ime_handler;
 mod pty_manager;
 mod session_store;
 
 use pty_manager::PtyState;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -18,6 +21,12 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // Install native IME handler for Vietnamese input (EVKey/UniKey)
+            if let Some(window) = app.webview_windows().values().next() {
+                ime_handler::install_ime_handler(app.handle(), window);
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -38,6 +47,13 @@ pub fn run() {
             session_store::add_project,
             session_store::remove_project,
             clipboard_helper::read_clipboard_files,
+            file_ops::list_directory,
+            file_ops::read_file,
+            file_ops::write_file,
+            file_ops::create_file,
+            file_ops::create_directory,
+            file_ops::rename_entry,
+            file_ops::delete_entry,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
