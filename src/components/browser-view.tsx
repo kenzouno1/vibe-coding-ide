@@ -37,6 +37,7 @@ export const BrowserView = memo(function BrowserView({
   const addLog = useBrowserStore((s) => s.addLog);
   const openAnnotation = useBrowserStore((s) => s.openAnnotation);
   const getActivePtySessionId = usePaneStore((s) => s.getActivePtySessionId);
+  const getAiPtySessionId = usePaneStore((s) => s.getAiPtySessionId);
 
   // Keep refs for resize observer callback (avoids stale closures)
   const viewRef = useRef(view);
@@ -190,13 +191,14 @@ export const BrowserView = memo(function BrowserView({
       ),
     );
 
-    // Text selection capture — Ctrl+Shift+S in browser sends text to terminal
+    // Text selection / "Send to AI Terminal" — prefer AI CLI terminal, fallback to active
     unlisteners.push(
       listen<{ label: string; text: string; url: string }>(
         "browser-selection",
         async (event) => {
           if (activeTabRef.current !== projectPath) return;
-          const sessionId = getActivePtySessionId(projectPath);
+          // Prefer AI terminal (claude/codex), fallback to active terminal
+          const sessionId = getAiPtySessionId(projectPath) || getActivePtySessionId(projectPath);
           if (!sessionId) return;
           try {
             await invoke("write_pty", {

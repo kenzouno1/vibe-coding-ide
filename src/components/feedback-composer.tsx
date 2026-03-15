@@ -17,12 +17,13 @@ export const FeedbackComposer = memo(function FeedbackComposer({
 }: FeedbackComposerProps) {
   const browserState = useBrowserStore((s) => s.getState(projectPath));
   const getActivePtySessionId = usePaneStore((s) => s.getActivePtySessionId);
+  const getAiPtySessionId = usePaneStore((s) => s.getAiPtySessionId);
   const [notes, setNotes] = useState("");
 
   const errors = browserState.consoleLogs.filter((l) => l.level === "error");
 
   const sendFeedback = useCallback(async () => {
-    const sessionId = getActivePtySessionId(projectPath);
+    const sessionId = getAiPtySessionId(projectPath) || getActivePtySessionId(projectPath);
     if (!sessionId) return;
 
     const lines: string[] = ["# Browser Feedback"];

@@ -87,16 +87,17 @@ export const BrowserConsolePanel = memo(function BrowserConsolePanel({
   const setConsoleFilter = useBrowserStore((s) => s.setConsoleFilter);
   const toggleConsolePanel = useBrowserStore((s) => s.toggleConsolePanel);
   const getActivePtySessionId = usePaneStore((s) => s.getActivePtySessionId);
+  const getAiPtySessionId = usePaneStore((s) => s.getAiPtySessionId);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
 
   const { consoleLogs, consoleFilter, consolePanelOpen } = browserState;
 
-  // Send text to the active terminal PTY
+  // Send text to AI terminal (claude/codex), fallback to active terminal
   const sendToTerminal = useCallback(
     async (text: string) => {
-      const sessionId = getActivePtySessionId(projectPath);
+      const sessionId = getAiPtySessionId(projectPath) || getActivePtySessionId(projectPath);
       if (!sessionId) return;
       try {
         await invoke("write_pty", { id: sessionId, data: text + "\n" });

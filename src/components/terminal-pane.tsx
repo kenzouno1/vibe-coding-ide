@@ -53,10 +53,20 @@ export const TerminalPane = memo(function TerminalPane({
   activeTabRef.current = activeTabPath;
 
   const setPtySessionId = usePaneStore((s) => s.setPtySessionId);
+  const markAiSession = usePaneStore((s) => s.markAiSession);
   const cwd = projectPath !== "." ? projectPath : undefined;
+
+  // Patterns that indicate an AI CLI is running in this terminal
+  const aiDetectedRef = useRef(false);
+  const AI_PATTERNS = /claude[> ❯]|codex[> ❯]|╭─|claude-code|anthropic|openai codex/i;
 
   const { write, resize, sessionIdRef } = usePty((data) => {
     termRef.current?.write(data);
+    // Detect AI CLI from terminal output (check first few outputs, then stop scanning)
+    if (!aiDetectedRef.current && sessionIdRef.current && AI_PATTERNS.test(data)) {
+      aiDetectedRef.current = true;
+      markAiSession(sessionIdRef.current);
+    }
   }, cwd);
 
   // Register PTY session ID in store when it becomes available

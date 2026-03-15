@@ -27,6 +27,8 @@ interface PaneStore {
   activeIds: Record<string, string>;
   /** Map pane IDs to PTY session IDs (set when PTY spawns) */
   ptySessionIds: Record<string, string>;
+  /** Track which PTY sessions are running AI CLIs (claude, codex, etc.) */
+  aiSessionIds: Set<string>;
 
   getTree: (projectPath: string) => PaneNode;
   getActiveId: (projectPath: string) => string;
@@ -35,7 +37,11 @@ interface PaneStore {
   closePane: (projectPath: string, targetId: string) => void;
   setRatio: (projectPath: string, splitId: string, ratio: number) => void;
   setPtySessionId: (paneId: string, sessionId: string) => void;
+  markAiSession: (sessionId: string) => void;
+  unmarkAiSession: (sessionId: string) => void;
   getActivePtySessionId: (projectPath: string) => string | null;
+  /** Find PTY session running AI CLI (claude/codex) for this project */
+  getAiPtySessionId: (projectPath: string) => string | null;
   removeProject: (projectPath: string) => void;
 }
 
@@ -68,7 +74,7 @@ function replaceNode(
 }
 
 /** Collect all leaf IDs */
-function collectLeafIds(node: PaneNode): string[] {
+export function collectLeafIds(node: PaneNode): string[] {
   if (node.type === "leaf") return [node.id];
   return [...collectLeafIds(node.first), ...collectLeafIds(node.second)];
 }
@@ -77,6 +83,7 @@ export const usePaneStore = create<PaneStore>((set, get) => ({
   trees: {},
   activeIds: {},
   ptySessionIds: {},
+  aiSessionIds: new Set(),
 
   getTree: (projectPath) => {
     const { trees } = get();
@@ -162,11 +169,40 @@ export const usePaneStore = create<PaneStore>((set, get) => ({
       ptySessionIds: { ...s.ptySessionIds, [paneId]: sessionId },
     })),
 
+  markAiSession: (sessionId) =>
+    set((s) => {
+      const next = new Set(s.aiSessionIds);
+      next.add(sessionId);
+      return { aiSessionIds: next };
+    }),
+
+  unmarkAiSession: (sessionId) =>
+    set((s) => {
+      const next = new Set(s.aiSessionIds);
+      next.delete(sessionId);
+      return { aiSessionIds: next };
+    }),
+
   getActivePtySessionId: (projectPath) => {
     const { activeIds, ptySessionIds } = get();
     const activePaneId = activeIds[projectPath];
     if (!activePaneId) return null;
     return ptySessionIds[activePaneId] ?? null;
+  },
+
+  getAiPtySessionId: (projectPath) => {
+    const { trees, ptySessionIds, aiSessionIds } = get();
+    const tree = trees[projectPath];
+    if (!tree) return null;
+    // Find first leaf whose PTY session is marked as AI
+    const leafIds = collectLeafIds(tree);
+    for (const paneId of leafIds) {
+      const sessionId = ptySessionIds[paneId];
+      if (sessionId && aiSessionIds.has(sessionId)) {
+        return sessionId;
+      }
+    }
+    return null;
   },
 
   removeProject: (projectPath) =>
