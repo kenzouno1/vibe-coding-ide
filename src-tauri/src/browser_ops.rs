@@ -196,8 +196,13 @@ pub async fn create_browser_webview(
         })
         .on_document_title_changed(move |_webview, title| {
             // Intercept console log flush signal from polling thread
-            if title.starts_with("__DEVTOOLS_FLUSH__") {
-                let json_data = &title["__DEVTOOLS_FLUSH__".len()..];
+            // Format: __DEVTOOLS_FLUSH_{counter}__[json array]
+            if title.starts_with("__DEVTOOLS_FLUSH_") {
+                // Find the JSON array start — first '[' character
+                let json_data = match title.find('[') {
+                    Some(pos) => &title[pos..],
+                    None => return,
+                };
                 if let Ok(logs) = serde_json::from_str::<Vec<serde_json::Value>>(json_data) {
                     for log in logs {
                         let _ = app_for_title.emit(
@@ -234,52 +239,38 @@ pub async fn create_browser_webview(
     // Start a polling thread to flush console logs from the child webview.
     // This is necessary because external URLs can't use Tauri IPC (invoke) —
     // the JS bridge stores logs in window.__DEVTOOLS_LOGS__ and we eval() to retrieve them.
+    // Start polling thread: flush console logs from child webview every 500ms.
+    // JS bridge stores logs in window.__DEVTOOLS_LOGS__. Polling thread eval()s
+    // JS that sets document.title to "__DEVTOOLS_FLUSH__<json>", which triggers
+    // on_document_title_changed to emit browser-console events.
     let poll_app = app.clone();
-    let poll_label = label.clone();
+    let poll_label = label;
     std::thread::spawn(move || {
-        let _flush_script = r#"
-            (function() {
-                var logs = window.__DEVTOOLS_LOGS__ || [];
-                window.__DEVTOOLS_LOGS__ = [];
-                var sel = window.__DEVTOOLS_SELECTION__;
-                window.__DEVTOOLS_SELECTION__ = null;
-                return JSON.stringify({ logs: logs, selection: sel });
-            })()
-        "#;
-
+        let mut counter: u64 = 0;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(500));
 
-            // Check if webview still exists
             let webview = match poll_app.get_webview(&poll_label) {
                 Some(w) => w,
                 None => break,
             };
 
-            // Eval returns void in Tauri — we can't get the return value directly.
-            // Instead, inject a script that sets document.title to a special prefix
-            // with the data, then read it via on_document_title_changed.
-            // But that's hacky. Better approach: inject a script that writes to
-            // a hidden element we can query.
-            //
-            // Simplest: use eval to call postMessage back to ourselves, but that
-            // won't work cross-origin either.
-            //
-            // ACTUAL simplest: Use eval to set window.name (readable from Rust? No.)
-            //
-            // Let's use the title-based signaling approach:
-            let signal_script = r#"
-                (function() {
-                    var logs = window.__DEVTOOLS_LOGS__ || [];
-                    if (logs.length === 0) return;
+            counter += 1;
+            // Use counter in title to ensure each flush triggers on_document_title_changed
+            // Store real title, set flush title, then restore after a short delay
+            let signal_script = format!(
+                r#"(function(){{
+                    var logs = window.__DEVTOOLS_LOGS__;
+                    if (!logs || logs.length === 0) return;
                     window.__DEVTOOLS_LOGS__ = [];
-                    var realTitle = document.title;
-                    document.title = '__DEVTOOLS_FLUSH__' + JSON.stringify(logs);
-                    setTimeout(function() { document.title = realTitle; }, 50);
-                })()
-            "#;
+                    var real = document.title;
+                    document.title = '__DEVTOOLS_FLUSH_{counter}__' + JSON.stringify(logs);
+                    setTimeout(function(){{ document.title = real; }}, 100);
+                }})()"#,
+                counter = counter
+            );
 
-            if webview.eval(signal_script).is_err() {
+            if webview.eval(&signal_script).is_err() {
                 break;
             }
         }
