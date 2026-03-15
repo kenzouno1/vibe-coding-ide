@@ -1,3 +1,5 @@
+mod agent_protocol;
+mod agent_server;
 mod browser_ops;
 mod clipboard_helper;
 mod file_ops;
@@ -11,15 +13,21 @@ mod ssh_presets;
 
 use pty_manager::PtyState;
 use ssh_manager::SshState;
+use std::sync::Arc;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let ssh_state = SshState::new();
+    // Clone Arc references for the agent server before moving SshState into Tauri
+    let agent_sessions = Arc::clone(&ssh_state.sessions);
+    let agent_output_tx = ssh_state.output_tx.clone();
+
     tauri::Builder::default()
         .manage(PtyState::new())
-        .manage(SshState::new())
+        .manage(ssh_state)
         .plugin(tauri_plugin_dialog::init())
-        .setup(|app| {
+        .setup(move |app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -32,6 +40,14 @@ pub fn run() {
             if let Some(window) = app.webview_windows().values().next() {
                 ime_handler::install_ime_handler(app.handle(), window);
             }
+
+            // Start agent WebSocket server for AI CLI integration
+            let token = uuid::Uuid::new_v4().to_string();
+            let sessions = Arc::clone(&agent_sessions);
+            let output_tx = agent_output_tx.clone();
+            tokio::spawn(async move {
+                agent_server::start_agent_server_with_refs(sessions, output_tx, token).await;
+            });
 
             Ok(())
         })

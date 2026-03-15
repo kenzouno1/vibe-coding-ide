@@ -4,6 +4,7 @@ import { usePaneStore } from "@/stores/pane-store";
 import { useGitStore } from "@/stores/git-store";
 import { useEditorStore } from "@/stores/editor-store";
 import { useProjectStore } from "@/stores/project-store";
+import { useSshStore } from "@/stores/ssh-store";
 
 /**
  * Global keyboard shortcut handler.
@@ -103,6 +104,37 @@ export function useKeyboardShortcuts() {
         }
       }
 
+      // SSH terminal shortcuts (only in ssh view)
+      if (view === "ssh") {
+        const sshStore = useSshStore.getState();
+        const sshSessionId = sshStore.activeSessionId;
+        if (sshSessionId) {
+          const activeId = getActiveId(sshSessionId);
+
+          if (isCtrl && e.shiftKey && e.key === "H") {
+            e.preventDefault();
+            split(sshSessionId, activeId, "horizontal");
+            // After split, activeId is updated to the new pane
+            const newPaneId = usePaneStore.getState().getActiveId(sshSessionId);
+            void sshStore.openChannel(sshSessionId, newPaneId);
+            return;
+          }
+          if (isCtrl && e.shiftKey && e.key === "V") {
+            e.preventDefault();
+            split(sshSessionId, activeId, "vertical");
+            const newPaneId = usePaneStore.getState().getActiveId(sshSessionId);
+            void sshStore.openChannel(sshSessionId, newPaneId);
+            return;
+          }
+          if (isCtrl && e.key === "w") {
+            e.preventDefault();
+            void sshStore.closeChannel(sshSessionId, activeId);
+            closePane(sshSessionId, activeId);
+            return;
+          }
+        }
+      }
+
       // Editor shortcuts (only in editor view)
       if (view === "editor") {
         if (isCtrl && e.key === "s") {
@@ -159,4 +191,5 @@ export function useKeyboardShortcuts() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [view, activeTabPath, openTabs, setView, setActiveTab, split, closePane, getActiveId, gitCommit, gitGetState, gitStageFile, gitUnstageFile, editorGetState, editorCloseFile]);
+  // Note: useSshStore.getState() is called imperatively inside handler — no dep needed
 }
