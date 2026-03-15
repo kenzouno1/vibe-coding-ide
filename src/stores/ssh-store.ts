@@ -142,7 +142,7 @@ export const useSshStore = create<SshStore>((set, get) => ({
 
   openChannel: async (sessionId, paneId) => {
     try {
-      const channelId = await invoke<string>("ssh_open_channel", { sessionId });
+      const channelId = await invoke<string>("ssh_open_channel", { session_id: sessionId });
       set((s) => {
         const conn = s.connections[sessionId];
         if (!conn) return s;
@@ -166,7 +166,7 @@ export const useSshStore = create<SshStore>((set, get) => ({
     const channelId = conn?.channelMap[paneId];
     if (channelId && channelId !== "default") {
       try {
-        await invoke("ssh_close_channel", { sessionId, channelId });
+        await invoke("ssh_close_channel", { session_id: sessionId, channel_id: channelId });
       } catch (e) {
         console.error("Failed to close SSH channel:", e);
       }
