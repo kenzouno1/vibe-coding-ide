@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, useCallback, memo } from "react";
-import { Stage, Layer, Line, Rect, Circle, Arrow, Text, Image as KonvaImage } from "react-konva";
+import { Stage, Layer, Line, Rect, Ellipse, Arrow, Text, Image as KonvaImage } from "react-konva";
 import { invoke } from "@tauri-apps/api/core";
 import { useBrowserStore, type AnnotationTool } from "@/stores/browser-store";
 import { AnnotationToolbar } from "@/components/annotation-toolbar";
 
-/** Shape data stored in undo/redo history */
 interface ShapeData {
   type: AnnotationTool;
   points?: number[];
@@ -12,7 +11,6 @@ interface ShapeData {
   y?: number;
   width?: number;
   height?: number;
-  radius?: number;
   text?: string;
   color: string;
   strokeWidth: number;
@@ -37,7 +35,11 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
   const [currentShape, setCurrentShape] = useState<ShapeData | null>(null);
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
+  // Text input state (replaces prompt() which blocks/crashes)
+  const [textInput, setTextInput] = useState<{ x: number; y: number } | null>(null);
+  const [textValue, setTextValue] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
 
   const { screenshotData, annotationTool, annotationColor, annotationStrokeWidth } = browserState;
 
@@ -47,7 +49,6 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
     const img = new window.Image();
     img.onload = () => {
       setBgImage(img);
-      // Fit to container
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
         const scale = Math.min(rect.width / img.width, rect.height / img.height, 1);
@@ -60,28 +61,17 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
     img.src = screenshotData;
   }, [screenshotData]);
 
-  // Fit stage to container on resize
+  // Focus text input when shown
   useEffect(() => {
-    if (!containerRef.current) return;
-    const observer = new ResizeObserver(() => {
-      if (bgImage && containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        const scale = Math.min(rect.width / bgImage.width, rect.height / bgImage.height, 1);
-        setStageSize({
-          width: Math.round(bgImage.width * scale),
-          height: Math.round(bgImage.height * scale),
-        });
-      }
-    });
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, [bgImage]);
+    if (textInput && textInputRef.current) {
+      textInputRef.current.focus();
+    }
+  }, [textInput]);
 
-  // Push to history
   const pushHistory = useCallback((newShapes: ShapeData[]) => {
     setHistory((prev) => {
       const trimmed = prev.slice(0, historyIndex + 1);
-      const next = [...trimmed, newShapes].slice(-50); // max 50 undo steps
+      const next = [...trimmed, newShapes].slice(-50);
       setHistoryIndex(next.length - 1);
       return next;
     });
@@ -102,9 +92,9 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
     setShapes(history[newIndex]);
   }, [historyIndex, history]);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (textInput) return; // don't handle while typing
       if (e.key === "Escape") {
         closeAnnotation(projectPath);
         return;
@@ -120,14 +110,39 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [undo, redo, closeAnnotation, projectPath]);
+  }, [undo, redo, closeAnnotation, projectPath, textInput]);
 
-  // Mouse handlers for drawing
+  // Commit text input
+  const commitTextInput = useCallback(() => {
+    if (!textInput || !textValue.trim()) {
+      setTextInput(null);
+      setTextValue("");
+      return;
+    }
+    const newShape: ShapeData = {
+      type: "text",
+      x: textInput.x,
+      y: textInput.y,
+      text: textValue,
+      color: annotationColor,
+      strokeWidth: annotationStrokeWidth,
+      opacity: 1,
+    };
+    pushHistory([...shapes, newShape]);
+    setTextInput(null);
+    setTextValue("");
+  }, [textInput, textValue, annotationColor, annotationStrokeWidth, shapes, pushHistory]);
+
   const handleMouseDown = useCallback((e: any) => {
+    // Commit any pending text input first
+    if (textInput) {
+      commitTextInput();
+      return;
+    }
     if (annotationTool === "select") return;
-    const pos = e.target.getStage().getPointerPosition();
+    const stage = e.target.getStage();
+    const pos = stage?.getPointerPosition();
     if (!pos) return;
-    setIsDrawing(true);
 
     const baseShape: ShapeData = {
       type: annotationTool,
@@ -136,25 +151,26 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
       opacity: annotationTool === "highlighter" ? 0.35 : 1,
     };
 
+    if (annotationTool === "text") {
+      // Show inline text input instead of prompt()
+      setTextInput({ x: pos.x, y: pos.y });
+      setTextValue("");
+      return;
+    }
+
+    setIsDrawing(true);
     if (annotationTool === "pen" || annotationTool === "highlighter") {
       setCurrentShape({ ...baseShape, points: [pos.x, pos.y] });
     } else if (annotationTool === "rect" || annotationTool === "circle") {
       setCurrentShape({ ...baseShape, x: pos.x, y: pos.y, width: 0, height: 0 });
     } else if (annotationTool === "arrow") {
       setCurrentShape({ ...baseShape, points: [pos.x, pos.y, pos.x, pos.y] });
-    } else if (annotationTool === "text") {
-      const text = prompt("Enter text:");
-      if (text) {
-        const newShape: ShapeData = { ...baseShape, x: pos.x, y: pos.y, text };
-        pushHistory([...shapes, newShape]);
-      }
-      setIsDrawing(false);
     }
-  }, [annotationTool, annotationColor, annotationStrokeWidth, shapes, pushHistory]);
+  }, [annotationTool, annotationColor, annotationStrokeWidth, shapes, pushHistory, textInput, commitTextInput]);
 
   const handleMouseMove = useCallback((e: any) => {
     if (!isDrawing || !currentShape) return;
-    const pos = e.target.getStage().getPointerPosition();
+    const pos = e.target.getStage()?.getPointerPosition();
     if (!pos) return;
 
     if (currentShape.type === "pen" || currentShape.type === "highlighter") {
@@ -180,7 +196,6 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
   const handleMouseUp = useCallback(() => {
     if (!isDrawing || !currentShape) return;
     setIsDrawing(false);
-    // Don't add tiny shapes (accidental clicks)
     if (currentShape.type === "rect" || currentShape.type === "circle") {
       if (Math.abs(currentShape.width || 0) < 3 && Math.abs(currentShape.height || 0) < 3) {
         setCurrentShape(null);
@@ -191,7 +206,6 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
     setCurrentShape(null);
   }, [isDrawing, currentShape, shapes, pushHistory]);
 
-  // Export as data URL
   const exportImage = useCallback(() => {
     if (!stageRef.current) return null;
     return stageRef.current.toDataURL({ pixelRatio: 2 });
@@ -203,12 +217,7 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
     const base64 = dataUrl.split(",")[1];
     const filename = `screenshot-${Date.now()}.png`;
     try {
-      const path = await invoke<string>("write_screenshot", {
-        projectPath,
-        filename,
-        data: base64,
-      });
-      console.log("Screenshot saved:", path);
+      await invoke<string>("write_screenshot", { projectPath, filename, data: base64 });
     } catch (err) {
       console.error("Failed to save screenshot:", err);
     }
@@ -219,18 +228,14 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
     if (!dataUrl) return;
     try {
       const blob = await fetch(dataUrl).then((r) => r.blob());
-      await navigator.clipboard.write([
-        new ClipboardItem({ "image/png": blob }),
-      ]);
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
     } catch (err) {
-      console.error("Failed to copy to clipboard:", err);
+      console.error("Failed to copy:", err);
     }
   }, [exportImage]);
 
-  // Render a shape from ShapeData
   const renderShape = (shape: ShapeData, key: string) => {
     const common = { opacity: shape.opacity ?? 1 };
-
     switch (shape.type) {
       case "pen":
       case "highlighter":
@@ -261,7 +266,7 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
         );
       case "circle":
         return (
-          <Circle
+          <Ellipse
             key={key}
             x={(shape.x || 0) + (shape.width || 0) / 2}
             y={(shape.y || 0) + (shape.height || 0) / 2}
@@ -302,6 +307,9 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
     }
   };
 
+  // If no screenshot data, show a placeholder to test drawing without screenshot
+  const hasScreenshot = !!bgImage;
+
   return (
     <div className="absolute inset-0 z-50 flex flex-col bg-ctp-crust">
       <AnnotationToolbar
@@ -316,7 +324,7 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
       />
       <div
         ref={containerRef}
-        className="flex-1 flex items-center justify-center overflow-hidden bg-ctp-crust"
+        className="flex-1 flex items-center justify-center overflow-hidden bg-ctp-crust relative"
       >
         <Stage
           ref={stageRef}
@@ -329,20 +337,38 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
           style={{ cursor: annotationTool === "select" ? "default" : "crosshair" }}
         >
           <Layer>
-            {/* Background screenshot */}
-            {bgImage && (
-              <KonvaImage
-                image={bgImage}
-                width={stageSize.width}
-                height={stageSize.height}
-              />
+            {hasScreenshot && (
+              <KonvaImage image={bgImage} width={stageSize.width} height={stageSize.height} />
             )}
-            {/* Committed shapes */}
+            {!hasScreenshot && (
+              <Rect x={0} y={0} width={stageSize.width} height={stageSize.height} fill="#313244" />
+            )}
             {shapes.map((s, i) => renderShape(s, `shape-${i}`))}
-            {/* Shape being drawn */}
             {currentShape && renderShape(currentShape, "current")}
           </Layer>
         </Stage>
+
+        {/* Inline text input overlay (replaces prompt() dialog) */}
+        {textInput && (
+          <input
+            ref={textInputRef}
+            type="text"
+            value={textValue}
+            onChange={(e) => setTextValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitTextInput();
+              if (e.key === "Escape") { setTextInput(null); setTextValue(""); }
+            }}
+            onBlur={commitTextInput}
+            className="absolute px-1 py-0.5 text-sm bg-ctp-base border border-ctp-mauve text-ctp-text focus:outline-none"
+            style={{
+              left: textInput.x,
+              top: textInput.y + 40, // offset for toolbar height
+              minWidth: 100,
+            }}
+            placeholder="Type text..."
+          />
+        )}
       </div>
     </div>
   );

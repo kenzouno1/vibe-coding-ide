@@ -195,13 +195,12 @@ export const BrowserView = memo(function BrowserView({
       ),
     );
 
-    // Screenshot capture result
+    // Screenshot capture result — open annotation even if screenshot is blank
     unlisteners.push(
       listen<{ dataUrl: string }>("browser-screenshot-captured", (event) => {
         if (activeTabRef.current !== projectPath) return;
-        if (event.payload.dataUrl) {
-          openAnnotation(projectPath, event.payload.dataUrl);
-        }
+        // Open annotation with screenshot data, or blank canvas if capture failed
+        openAnnotation(projectPath, event.payload.dataUrl || "");
       }),
     );
 
@@ -229,7 +228,7 @@ export const BrowserView = memo(function BrowserView({
         <BrowserConsolePanel projectPath={projectPath} onOpenFeedback={() => setFeedbackOpen(true)} />
       )}
       {/* Annotation overlay — full-screen canvas over the browser view */}
-      {browserState.annotationOpen && browserState.screenshotData && (
+      {browserState.annotationOpen && (
         <AnnotationOverlay projectPath={projectPath} />
       )}
       {/* Feedback composer modal */}
