@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "browser-webview",
+  "description": "Grants browser child webviews (loading external URLs) access to Tauri IPC so that the CONSOLE_BRIDGE_SCRIPT can invoke app commands (forward_console_log, forward_browser_selection, receive_browser_screenshot). The 'remote' field enables window.__TAURI_INTERNALS__.invoke from non-local origins.",
+  "local": false,
+  "remote": {
+    "urls": ["https://**", "http://**"]
+  },
+  "webviews": ["browser-*"],
+  "permissions": [
+    "core:default"
+  ]
+}

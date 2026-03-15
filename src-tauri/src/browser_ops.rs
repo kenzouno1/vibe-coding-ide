@@ -48,18 +48,26 @@ const CONSOLE_BRIDGE_SCRIPT: &str = r#"
     return parts.join(' ');
   }
 
-  function send(level, args) {
-    orig[level].apply(console, args);
+  function tauriInvoke(cmd, args) {
+    // In child webviews loading external URLs, window.__TAURI__ (from @tauri-apps/api)
+    // is NOT available because the npm package is not loaded on external pages.
+    // Use window.__TAURI_INTERNALS__.invoke instead — this is the low-level IPC
+    // that Tauri injects into ALL webviews via initialization_script.
     try {
-      if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
-        window.__TAURI__.core.invoke('forward_console_log', {
-          level: level,
-          message: ser(args),
-          timestamp: Date.now(),
-          pageUrl: location.href
-        });
+      if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {
+        window.__TAURI_INTERNALS__.invoke(cmd, args);
       }
     } catch(e) {}
+  }
+
+  function send(level, args) {
+    orig[level].apply(console, args);
+    tauriInvoke('forward_console_log', {
+      level: level,
+      message: ser(args),
+      timestamp: Date.now(),
+      pageUrl: location.href
+    });
   }
 
   console.log = function() { send('log', arguments); };
@@ -84,14 +92,10 @@ const CONSOLE_BRIDGE_SCRIPT: &str = r#"
       ev.preventDefault();
       var sel = window.getSelection();
       if (sel && sel.toString().trim()) {
-        try {
-          if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
-            window.__TAURI__.core.invoke('forward_browser_selection', {
-              text: sel.toString(),
-              pageUrl: location.href
-            });
-          }
-        } catch(e) {}
+        tauriInvoke('forward_browser_selection', {
+          text: sel.toString(),
+          pageUrl: location.href
+        });
       }
     }
   });
@@ -363,48 +367,66 @@ pub async fn capture_browser_screenshot(
     let webview = get_child_webview(&app, &label)?;
 
     // Inject a script that captures the visible viewport as a PNG data URL.
-    // Uses a simple approach: create an offscreen canvas from document content.
+    //
+    // The SVG foreignObject approach is broken for external pages:
+    //   - CORS blocks external stylesheets/images → canvas is tainted
+    //   - Security restrictions prevent serializing cross-origin frames
+    //   - Result is almost always blank or throws a SecurityError
+    //
+    // Instead, we load html2canvas from CDN (a well-known, battle-tested library)
+    // and fall back gracefully if it fails (e.g. offline or CSP blocks CDN).
+    // html2canvas handles CORS, iframes, and complex layouts far better.
+    //
+    // Note: window.__TAURI_INTERNALS__.invoke is used (not window.__TAURI__) because
+    // external pages don't have @tauri-apps/api loaded.
     let capture_script = r#"
-    (async function() {
-      try {
-        // Use html2canvas if available, otherwise fallback to simple body capture
-        var canvas = document.createElement('canvas');
-        var rect = document.documentElement.getBoundingClientRect();
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        var ctx = canvas.getContext('2d');
-
-        // Attempt to draw using SVG foreignObject approach
-        var data = '<svg xmlns="http://www.w3.org/2000/svg" width="' + canvas.width + '" height="' + canvas.height + '">' +
-          '<foreignObject width="100%" height="100%">' +
-          new XMLSerializer().serializeToString(document.documentElement) +
-          '</foreignObject></svg>';
-
-        var img = new Image();
-        var svgBlob = new Blob([data], {type: 'image/svg+xml;charset=utf-8'});
-        var url = URL.createObjectURL(svgBlob);
-
-        img.onload = function() {
-          ctx.drawImage(img, 0, 0);
-          URL.revokeObjectURL(url);
-          var dataUrl = canvas.toDataURL('image/png');
-          if (window.__TAURI__ && window.__TAURI__.core) {
-            window.__TAURI__.core.invoke('receive_browser_screenshot', { dataUrl: dataUrl });
+    (function() {
+      function sendResult(dataUrl) {
+        try {
+          if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {
+            window.__TAURI_INTERNALS__.invoke('receive_browser_screenshot', { dataUrl: dataUrl || '' });
           }
-        };
-        img.onerror = function() {
-          URL.revokeObjectURL(url);
-          // Fallback: send a blank screenshot signal
-          if (window.__TAURI__ && window.__TAURI__.core) {
-            window.__TAURI__.core.invoke('receive_browser_screenshot', { dataUrl: '' });
-          }
-        };
-        img.src = url;
-      } catch(e) {
-        if (window.__TAURI__ && window.__TAURI__.core) {
-          window.__TAURI__.core.invoke('receive_browser_screenshot', { dataUrl: '' });
-        }
+        } catch(e) {}
       }
+
+      function captureWithHtml2canvas(h2c) {
+        h2c(document.body, {
+          useCORS: true,
+          allowTaint: false,
+          scale: window.devicePixelRatio || 1,
+          width: window.innerWidth,
+          height: window.innerHeight,
+          x: window.scrollX,
+          y: window.scrollY,
+          logging: false
+        }).then(function(canvas) {
+          sendResult(canvas.toDataURL('image/png'));
+        }).catch(function() {
+          sendResult('');
+        });
+      }
+
+      // If html2canvas is already on the page, use it directly
+      if (typeof window.html2canvas === 'function') {
+        captureWithHtml2canvas(window.html2canvas);
+        return;
+      }
+
+      // Dynamically load html2canvas from CDN
+      var script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      script.onload = function() {
+        if (typeof window.html2canvas === 'function') {
+          captureWithHtml2canvas(window.html2canvas);
+        } else {
+          sendResult('');
+        }
+      };
+      script.onerror = function() {
+        // CDN blocked or offline — send empty to signal failure
+        sendResult('');
+      };
+      document.head.appendChild(script);
     })();
     "#;
 
