@@ -42,11 +42,15 @@ pub fn run() {
             }
 
             // Start agent WebSocket server for AI CLI integration
+            // Use std::thread + new Tokio runtime since Tauri's setup doesn't run inside a Tokio context
             let token = uuid::Uuid::new_v4().to_string();
             let sessions = Arc::clone(&agent_sessions);
             let output_tx = agent_output_tx.clone();
-            tokio::spawn(async move {
-                agent_server::start_agent_server_with_refs(sessions, output_tx, token).await;
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+                rt.block_on(async move {
+                    agent_server::start_agent_server_with_refs(sessions, output_tx, token).await;
+                });
             });
 
             Ok(())
