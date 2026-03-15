@@ -23,6 +23,7 @@
   - `pty_manager.rs` — Terminal PTY management
   - `session_store.rs` — Session persistence logic
   - `clipboard_helper.rs` — Clipboard utilities
+  - `browser_ops.rs` — Browser webview lifecycle management
 
 ## Code Style
 

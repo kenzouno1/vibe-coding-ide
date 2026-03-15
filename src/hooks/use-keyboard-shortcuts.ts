@@ -50,6 +50,16 @@ export function useKeyboardShortcuts() {
         setView("editor");
         return;
       }
+      if (isCtrl && e.key === "4") {
+        e.preventDefault();
+        setView("browser");
+        return;
+      }
+      if (isCtrl && e.key === "5") {
+        e.preventDefault();
+        setView("ssh");
+        return;
+      }
 
       // Tab switching: Ctrl+Tab / Ctrl+Shift+Tab
       if (isCtrl && e.key === "Tab") {

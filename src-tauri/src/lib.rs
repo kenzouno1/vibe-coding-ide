@@ -1,17 +1,23 @@
+mod browser_ops;
 mod clipboard_helper;
 mod file_ops;
 mod git_ops;
 mod ime_handler;
 mod pty_manager;
 mod session_store;
+mod sftp_ops;
+mod ssh_manager;
+mod ssh_presets;
 
 use pty_manager::PtyState;
+use ssh_manager::SshState;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(PtyState::new())
+        .manage(SshState::new())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -54,6 +60,27 @@ pub fn run() {
             file_ops::create_directory,
             file_ops::rename_entry,
             file_ops::delete_entry,
+            ssh_manager::ssh_connect,
+            ssh_manager::ssh_write,
+            ssh_manager::ssh_resize,
+            ssh_manager::ssh_disconnect,
+            sftp_ops::sftp_list_dir,
+            sftp_ops::sftp_download,
+            sftp_ops::sftp_upload,
+            sftp_ops::sftp_mkdir,
+            sftp_ops::sftp_delete,
+            ssh_presets::ssh_preset_list,
+            ssh_presets::ssh_preset_save,
+            ssh_presets::ssh_preset_delete,
+            browser_ops::create_browser_webview,
+            browser_ops::navigate_browser,
+            browser_ops::browser_go_back,
+            browser_ops::browser_go_forward,
+            browser_ops::browser_reload,
+            browser_ops::resize_browser_webview,
+            browser_ops::show_browser_webview,
+            browser_ops::hide_browser_webview,
+            browser_ops::destroy_browser_webview,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

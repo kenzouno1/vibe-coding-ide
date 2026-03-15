@@ -2,28 +2,29 @@
 
 ## High-Level Overview
 
-DevTools is a Tauri v2 desktop application with a React/TypeScript frontend and Rust backend. It provides three main views (Terminal, Git, Editor) for each open project, with per-project isolated state and session persistence.
+DevTools is a Tauri v2 desktop application with a React/TypeScript frontend and Rust backend. It provides four main views (Terminal, Git, Editor, SSH) for each open project, with per-project isolated state and session persistence.
 
 ```
 ┌─────────────────────────────────────────┐
 │         React Frontend (TypeScript)      │
 │  ┌──────────────────────────────────┐   │
-│  │ Views: Terminal | Git | Editor   │   │
-│  │ Sidebar Navigation (Ctrl+1/2/3)  │   │
+│  │ Views: Terminal|Git|Editor|SSH   │   │
+│  │ Sidebar Navigation (Ctrl+1/2/3/4/5)│  │
 │  └──────────────────────────────────┘   │
 │              Zustand Stores              │
-│  App | Project | Pane | Git | Editor    │
+│  App | Project | Pane | Git | Editor|SSH│
 └────────────────────┬────────────────────┘
                      │ IPC (Tauri)
                      ↓
 ┌─────────────────────────────────────────┐
 │   Rust Backend (Tauri v2 Commands)      │
 │  ┌──────────────────────────────────┐   │
-│  │ file_ops   | git_ops | pty_mgr  │   │
+│  │ file_ops | git_ops | pty_mgr    │   │
+│  │ ssh_manager | sftp_ops | ssh_.. │   │
 │  │ session_store                    │   │
 │  └──────────────────────────────────┘   │
 │         OS Integration Layer             │
-│  File I/O | Git CLI | PTY | Clipboard  │
+│  File I/O | Git CLI | PTY | SSH | SFTP │
 └─────────────────────────────────────────┘
 ```
 
@@ -49,11 +50,25 @@ DevTools is a Tauri v2 desktop application with a React/TypeScript frontend and 
 - Monaco Editor instance (right pane)
 - Tab close buttons and context menu
 
+#### Browser View (`browser-view.tsx`, `browser-url-bar.tsx`)
+- Native Tauri secondary webview for rendering web pages
+- URL bar with navigation (back/forward/refresh)
+- Per-project browser state (each tab has independent browser instance)
+- ResizeObserver for positioning native webview within React container
+
+#### SSH View (`ssh-panel.tsx`, `ssh-terminal.tsx`, `sftp-browser.tsx`)
+- Split layout: left-side SFTP file tree, right-side SSH terminal (xterm.js)
+- SSH preset management (load/save/delete connection profiles)
+- SSH terminal with async command input/output via russh
+- SFTP file browser with drag-drop support, context menu for delete/download
+- Per-project SSH connection state and SFTP tree cache
+- Terminal resizing synchronization with remote PTY
+
 ### State Management (Zustand)
 
 #### AppStore
 ```typescript
-type AppView = "terminal" | "git" | "editor";
+type AppView = "terminal" | "git" | "editor" | "ssh";
 interface: { view, setView }
 ```
 Global UI state only. Persisted to localStorage optionally.
@@ -115,6 +130,43 @@ interface: {
 ```
 Manages file tabs, content, and dirty tracking per project.
 
+#### BrowserStore
+```typescript
+interface: {
+  states: Record<projectPath, BrowserState>,  // Per-project browser state
+  url: string,
+  isLoading: boolean,
+  canGoBack: boolean,
+  canGoForward: boolean,
+  setUrl,
+  setLoading,
+  setNavState,
+  getState
+}
+```
+Manages browser navigation state per project. Webview instance created lazily on first activation.
+
+#### SSHStore
+```typescript
+interface: {
+  states: Record<projectPath, SSHState>,  // Per-project SSH state
+  presets: SSHPreset[],                   // Saved connection presets
+  activeConnection: SSHConnection | null,
+  connected: boolean,
+  terminalOutput: string,
+  sftpNodes: SFTPNode[],
+  connect,       // Connect to saved preset
+  disconnect,
+  writeInput,    // Send command to SSH terminal
+  resizeTerminal,
+  loadPresets,   // Load from ~/.devtools/ssh-presets.json
+  savePreset,
+  deletePreset,
+  listSFTPFiles
+}
+```
+Manages SSH connections, presets, and SFTP file browser state per project.
+
 ### Hooks
 
 #### `use-keyboard-shortcuts.ts`
@@ -122,6 +174,9 @@ Global event handler for Ctrl+1/2/3 view switching, Ctrl+Tab project switching, 
 
 #### `use-pty.ts`
 Creates xterm.js instances and connects to PTY backend via IPC.
+
+#### `use-ssh.ts`
+Creates xterm.js instance for SSH terminal and connects to SSH backend via IPC. Applies shared xterm configuration.
 
 #### `use-session-persistence.ts`
 Loads/saves project sessions from `~/.devtools/sessions/` on mount/unmount.
@@ -139,6 +194,12 @@ Returns Lucide icon for file type (e.g., File, Code, Settings, Folder).
 
 #### `monaco-catppuccin-theme.ts`
 Defines Catppuccin Mocha theme colors and registers with Monaco Editor.
+
+#### `xterm-config.ts`
+Shared xterm.js configuration (DRY) for Terminal and SSH views. Defines colors, fonts, options.
+
+#### `format-size.ts`
+Utility to format file sizes (bytes → KB/MB/GB) for SFTP browser display.
 
 ## Backend Architecture (Rust)
 
@@ -218,6 +279,62 @@ pub fn load_session(project: &str) -> Result<PaneTree, String>
 
 Allows terminal panes to survive app restart.
 
+### ssh_manager.rs (SSH Connection)
+```rust
+pub async fn connect(host: &str, port: u16, user: &str, auth: AuthMethod)
+  -> Result<SSHSession, String>
+  └─ Initiates SSH connection via russh
+  └─ Supports password and key-based auth
+  └─ Returns session handle for I/O
+
+pub async fn write_input(session: &mut SSHSession, cmd: &str) -> Result<(), String>
+  └─ Sends command to SSH terminal channel
+
+pub async fn read_output(session: &SSHSession) -> Result<String, String>
+  └─ Reads SSH channel output (preserves ANSI codes)
+
+pub async fn resize_terminal(session: &mut SSHSession, cols: u32, rows: u32)
+  -> Result<(), String>
+  └─ Requests PTY resize on remote
+
+pub async fn disconnect(session: SSHSession) -> Result<(), String>
+  └─ Closes SSH session gracefully
+```
+
+Uses `russh` async SSH client. Manages PTY allocation and channel I/O.
+
+### sftp_ops.rs (SFTP File Operations)
+```rust
+pub async fn list_dir(session: &SFTPSession, path: &str)
+  -> Result<Vec<SFTPFile>, String>
+  └─ Lists directory contents with metadata
+  └─ Returns name, size, permissions, mtime
+
+pub async fn download_file(session: &SFTPSession, remote: &str, local: &str)
+  -> Result<(), String>
+
+pub async fn upload_file(session: &SFTPSession, local: &str, remote: &str)
+  -> Result<(), String>
+
+pub async fn delete_file(session: &SFTPSession, path: &str) -> Result<(), String>
+```
+
+Uses `russh-sftp` for SFTP protocol. Integrates with SSH session from ssh_manager.
+
+### ssh_presets.rs (Connection Presets)
+```rust
+pub fn load_presets() -> Result<Vec<SSHPreset>, String>
+  └─ Loads presets from ~/.devtools/ssh-presets.json
+
+pub fn save_preset(preset: SSHPreset) -> Result<(), String>
+  └─ Appends/updates preset to file
+
+pub fn delete_preset(name: &str) -> Result<(), String>
+  └─ Removes preset by name
+```
+
+Persists connection details (host, port, user, auth method) for quick reconnect.
+
 ## Data Flow Examples
 
 ### Opening a File in Editor
@@ -271,6 +388,64 @@ xterm.js renders output in terminal
 PaneStore tracks active pane
 ```
 
+### SSH Connection and Terminal I/O
+```
+User selects preset and clicks "Connect"
+  ↓
+SSHPanel calls connectSSH(preset)
+  ↓
+SSHStore invokes ssh_connect(host, user, auth)
+  ↓
+IPC → ssh_manager.rs async connect()
+  ↓
+russh establishes session, allocates PTY
+  ↓
+Returns session handle to frontend
+  ↓
+SSHStore.connected = true, SSHPanel renders terminal
+
+User types command in SSH terminal
+  ↓
+SSHTerminal captures input via xterm.js
+  ↓
+Invokes ssh_write_input(sessionId, cmd)
+  ↓
+IPC → ssh_manager.rs async write_input()
+  ↓
+Writes to SSH channel, reads output
+  ↓
+Returns output to frontend
+  ↓
+xterm.js renders output in SSH terminal
+```
+
+### SFTP File Browsing
+```
+User opens SSH view (connected)
+  ↓
+SFTPBrowser invokes ssh_list_sftp("/")
+  ↓
+IPC → sftp_ops.rs async list_dir()
+  ↓
+Uses SFTP session to list remote directory
+  ↓
+Returns file list with metadata (size, mtime, perms)
+  ↓
+SSHStore.sftpNodes updated
+  ↓
+SFTPBrowser renders tree with file icons and sizes
+
+User clicks file to download
+  ↓
+SSHPanel invokes ssh_download_file(remote, localPath)
+  ↓
+IPC → sftp_ops.rs async download_file()
+  ↓
+Transfers file via SFTP
+  ↓
+Returns success to frontend
+```
+
 ## Project Isolation Model
 
 Each open project (tab) has completely isolated state:
@@ -289,6 +464,11 @@ Each open project (tab) has completely isolated state:
 - Separate open file tabs
 - Separate view states (scroll, cursor)
 - Files opened relative to project root
+
+### SSH
+- Separate SSH connection per project (one active at a time)
+- SFTP tree cache isolated to connection
+- SSH session handle held in store until disconnect
 
 ### Switching Projects
 Switching tabs via Ctrl+Tab hides the previous project's panels and shows the active project's panels. No reload/recreation occurs; state is preserved.

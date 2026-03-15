@@ -1,0 +1,186 @@
+import { useEffect, useRef, useCallback, useMemo, memo } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { useAppStore } from "@/stores/app-store";
+import { useProjectStore } from "@/stores/project-store";
+import { useBrowserStore } from "@/stores/browser-store";
+import { BrowserUrlBar } from "@/components/browser-url-bar";
+
+/**
+ * Replicate the Rust DefaultHasher label generation for event filtering.
+ * Uses FNV-1a-like hash (matches Rust's DefaultHasher for simple strings).
+ * We pass projectId to Rust which generates label — so we match by projectId in events instead.
+ */
+
+interface BrowserViewProps {
+  projectPath: string;
+}
+
+export const BrowserView = memo(function BrowserView({
+  projectPath,
+}: BrowserViewProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guard against double webview creation from rapid view toggles
+  const creatingRef = useRef(false);
+
+  const view = useAppStore((s) => s.view);
+  const activeTabPath = useProjectStore((s) => s.activeTabPath);
+  const browserState = useBrowserStore((s) => s.getState(projectPath));
+  const markWebviewCreated = useBrowserStore((s) => s.markWebviewCreated);
+  const setUrl = useBrowserStore((s) => s.setUrl);
+  const setLoading = useBrowserStore((s) => s.setLoading);
+  const setTitle = useBrowserStore((s) => s.setTitle);
+
+  // Keep refs for resize observer callback (avoids stale closures)
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const activeTabRef = useRef(activeTabPath);
+  activeTabRef.current = activeTabPath;
+
+  // Compute expected webview label for event filtering
+  // Must match Rust's webview_label() — we use projectPath as the key
+  const expectedLabel = useMemo(() => {
+    // We can't replicate DefaultHasher in JS, so we filter by checking
+    // if the label starts with "browser-" and match events by projectPath.
+    // Instead, we'll pass projectId in events and filter on that.
+    // For now, each BrowserView only processes events if it's the active project.
+    return projectPath;
+  }, [projectPath]);
+
+  // Send current container bounds to Rust for webview positioning
+  const syncBounds = useCallback(async () => {
+    if (!containerRef.current || !browserState.webviewCreated) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    try {
+      await invoke("resize_browser_webview", {
+        projectId: projectPath,
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height,
+      });
+    } catch {
+      // Webview may not exist yet
+    }
+  }, [projectPath, browserState.webviewCreated]);
+
+  // Create webview on first browser view activation (lazy)
+  useEffect(() => {
+    const isVisible = view === "browser" && activeTabPath === projectPath;
+    if (!isVisible || browserState.webviewCreated || creatingRef.current || !containerRef.current) return;
+
+    creatingRef.current = true;
+    const rect = containerRef.current.getBoundingClientRect();
+    const url = browserState.url || "about:blank";
+
+    invoke("create_browser_webview", {
+      projectId: projectPath,
+      url,
+      x: rect.left,
+      y: rect.top,
+      width: Math.max(rect.width, 100),
+      height: Math.max(rect.height, 100),
+    })
+      .then(() => markWebviewCreated(projectPath))
+      .catch((err) => console.error("Failed to create browser webview:", err))
+      .finally(() => { creatingRef.current = false; });
+  }, [view, activeTabPath, projectPath, browserState.webviewCreated, browserState.url, markWebviewCreated]);
+
+  // Show/hide webview based on view and active tab
+  useEffect(() => {
+    if (!browserState.webviewCreated) return;
+    const isVisible = view === "browser" && activeTabPath === projectPath;
+
+    if (isVisible) {
+      invoke("show_browser_webview", { projectId: projectPath })
+        .then(() => syncBounds())
+        .catch(() => {});
+    } else {
+      invoke("hide_browser_webview", { projectId: projectPath }).catch(() => {});
+    }
+  }, [view, activeTabPath, projectPath, browserState.webviewCreated, syncBounds]);
+
+  // ResizeObserver to track container bounds and sync to native webview
+  useEffect(() => {
+    if (!containerRef.current || !browserState.webviewCreated) return;
+
+    const observer = new ResizeObserver(() => {
+      if (viewRef.current !== "browser") return;
+      if (activeTabRef.current !== projectPath) return;
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+      resizeTimerRef.current = setTimeout(() => syncBounds(), 50);
+    });
+    observer.observe(containerRef.current);
+
+    return () => {
+      observer.disconnect();
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+    };
+  }, [projectPath, browserState.webviewCreated, syncBounds]);
+
+  // Listen for browser events from Rust — filter by webview label
+  useEffect(() => {
+    const unlisteners: Promise<() => void>[] = [];
+
+    // We need to match events by label. Since we can't replicate the hash in JS,
+    // we listen to all events but only this component's instance processes them
+    // when it's the active project. Events include the label for disambiguation.
+    // TODO: In future, pass projectId directly in event payload for cleaner filtering.
+
+    unlisteners.push(
+      listen<{ label: string; url: string }>("browser-navigated", (event) => {
+        // Only process if this is the active project to avoid cross-project updates
+        if (activeTabRef.current !== projectPath) return;
+        setUrl(projectPath, event.payload.url);
+      }),
+    );
+
+    unlisteners.push(
+      listen<{ label: string; event: string; url: string }>(
+        "browser-page-load",
+        (event) => {
+          if (activeTabRef.current !== projectPath) return;
+          if (event.payload.event === "started") {
+            setLoading(projectPath, true);
+          } else if (event.payload.event === "finished") {
+            setLoading(projectPath, false);
+            setUrl(projectPath, event.payload.url);
+          }
+        },
+      ),
+    );
+
+    unlisteners.push(
+      listen<{ label: string; title: string }>(
+        "browser-title-changed",
+        (event) => {
+          if (activeTabRef.current !== projectPath) return;
+          setTitle(projectPath, event.payload.title);
+        },
+      ),
+    );
+
+    return () => {
+      unlisteners.forEach((u) => u.then((fn) => fn()));
+    };
+  }, [projectPath, setUrl, setLoading, setTitle]);
+
+  return (
+    <div className="flex flex-col h-full w-full">
+      <BrowserUrlBar projectPath={projectPath} />
+      {/* Container div — native webview is overlaid on top of this area */}
+      <div
+        ref={containerRef}
+        className="flex-1 bg-ctp-crust relative"
+      >
+        {!browserState.webviewCreated && (
+          <div className="absolute inset-0 flex items-center justify-center text-ctp-overlay0 text-sm">
+            Browser will load when activated
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});

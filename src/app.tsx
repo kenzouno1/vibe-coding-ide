@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { SplitPaneContainer } from "@/components/split-pane-container";
 import { GitPanel } from "@/components/git-panel";
 import { EditorView } from "@/components/editor-view";
+import { BrowserView } from "@/components/browser-view";
+import { SshPanel } from "@/components/ssh-panel";
 import { Sidebar } from "@/components/sidebar";
 import { StatusBar } from "@/components/status-bar";
 import { TabBar } from "@/components/tab-bar";
@@ -80,9 +82,29 @@ export function App() {
                 >
                   <EditorView projectPath={tab.path} />
                 </div>
+                {/* Browser view */}
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    visibility: view === "browser" ? "visible" : "hidden",
+                    zIndex: view === "browser" ? 1 : 0,
+                  }}
+                >
+                  <BrowserView projectPath={tab.path} />
+                </div>
               </div>
             );
           })}
+          {/* SSH view — connection-based, not per-project */}
+          <div
+            className="absolute inset-0"
+            style={{
+              visibility: view === "ssh" ? "visible" : "hidden",
+              zIndex: view === "ssh" ? 2 : 0,
+            }}
+          >
+            <SshPanel />
+          </div>
         </div>
       </div>
       <StatusBar />

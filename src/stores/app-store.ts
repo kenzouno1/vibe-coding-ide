@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type AppView = "terminal" | "git" | "editor";
+export type AppView = "terminal" | "git" | "editor" | "browser" | "ssh";
 
 interface AppStore {
   view: AppView;
