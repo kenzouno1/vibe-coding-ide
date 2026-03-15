@@ -7,6 +7,7 @@ import { useBrowserStore, type ConsoleLog } from "@/stores/browser-store";
 import { usePaneStore } from "@/stores/pane-store";
 import { BrowserUrlBar } from "@/components/browser-url-bar";
 import { BrowserConsolePanel } from "@/components/browser-console-panel";
+import { AnnotationOverlay } from "@/components/annotation-overlay";
 import { useServerDetect } from "@/hooks/use-server-detect";
 
 interface BrowserViewProps {
@@ -32,6 +33,7 @@ export const BrowserView = memo(function BrowserView({
   const setLoading = useBrowserStore((s) => s.setLoading);
   const setTitle = useBrowserStore((s) => s.setTitle);
   const addLog = useBrowserStore((s) => s.addLog);
+  const openAnnotation = useBrowserStore((s) => s.openAnnotation);
   const getActivePtySessionId = usePaneStore((s) => s.getActivePtySessionId);
 
   // Keep refs for resize observer callback (avoids stale closures)
@@ -191,13 +193,23 @@ export const BrowserView = memo(function BrowserView({
       ),
     );
 
+    // Screenshot capture result
+    unlisteners.push(
+      listen<{ dataUrl: string }>("browser-screenshot-captured", (event) => {
+        if (activeTabRef.current !== projectPath) return;
+        if (event.payload.dataUrl) {
+          openAnnotation(projectPath, event.payload.dataUrl);
+        }
+      }),
+    );
+
     return () => {
       unlisteners.forEach((u) => u.then((fn) => fn()));
     };
-  }, [projectPath, setUrl, setLoading, setTitle, addLog, getActivePtySessionId]);
+  }, [projectPath, setUrl, setLoading, setTitle, addLog, getActivePtySessionId, openAnnotation]);
 
   return (
-    <div className="flex flex-col h-full w-full">
+    <div className="flex flex-col h-full w-full relative">
       <BrowserUrlBar projectPath={projectPath} />
       {/* Container div — native webview is overlaid on top of this area */}
       <div
@@ -213,6 +225,10 @@ export const BrowserView = memo(function BrowserView({
       {/* Console panel — shows captured console logs from embedded browser */}
       {browserState.webviewCreated && (
         <BrowserConsolePanel projectPath={projectPath} />
+      )}
+      {/* Annotation overlay — full-screen canvas over the browser view */}
+      {browserState.annotationOpen && browserState.screenshotData && (
+        <AnnotationOverlay projectPath={projectPath} />
       )}
     </div>
   );

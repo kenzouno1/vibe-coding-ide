@@ -90,6 +90,9 @@ pub fn run() {
             browser_ops::destroy_browser_webview,
             browser_ops::forward_console_log,
             browser_ops::forward_browser_selection,
+            browser_ops::capture_browser_screenshot,
+            browser_ops::receive_browser_screenshot,
+            browser_ops::write_screenshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

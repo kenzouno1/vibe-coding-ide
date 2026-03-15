@@ -9,6 +9,7 @@ export interface ConsoleLog {
 }
 
 export type ConsoleFilter = "all" | "error" | "warn" | "info" | "log";
+export type AnnotationTool = "pen" | "highlighter" | "rect" | "circle" | "arrow" | "text" | "select";
 
 const MAX_CONSOLE_LOGS = 500;
 
@@ -22,6 +23,12 @@ export interface BrowserState {
   consoleLogs: ConsoleLog[];
   consoleFilter: ConsoleFilter;
   consolePanelOpen: boolean;
+  // Annotation state
+  annotationOpen: boolean;
+  screenshotData: string | null;
+  annotationTool: AnnotationTool;
+  annotationColor: string;
+  annotationStrokeWidth: number;
 }
 
 const DEFAULT_STATE: BrowserState = {
@@ -34,6 +41,11 @@ const DEFAULT_STATE: BrowserState = {
   consoleLogs: [],
   consoleFilter: "all",
   consolePanelOpen: true,
+  annotationOpen: false,
+  screenshotData: null,
+  annotationTool: "pen",
+  annotationColor: "#f38ba8",
+  annotationStrokeWidth: 3,
 };
 
 interface BrowserStore {
@@ -48,6 +60,11 @@ interface BrowserStore {
   clearLogs: (projectPath: string) => void;
   setConsoleFilter: (projectPath: string, filter: ConsoleFilter) => void;
   toggleConsolePanel: (projectPath: string) => void;
+  openAnnotation: (projectPath: string, screenshotData: string) => void;
+  closeAnnotation: (projectPath: string) => void;
+  setAnnotationTool: (projectPath: string, tool: AnnotationTool) => void;
+  setAnnotationColor: (projectPath: string, color: string) => void;
+  setAnnotationStrokeWidth: (projectPath: string, width: number) => void;
   removeProject: (projectPath: string) => void;
 }
 
@@ -104,6 +121,21 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
       const current = s.states[projectPath] ?? DEFAULT_STATE;
       return { states: updateState(s.states, projectPath, { consolePanelOpen: !current.consolePanelOpen }) };
     }),
+
+  openAnnotation: (projectPath, screenshotData) =>
+    set((s) => ({ states: updateState(s.states, projectPath, { annotationOpen: true, screenshotData }) })),
+
+  closeAnnotation: (projectPath) =>
+    set((s) => ({ states: updateState(s.states, projectPath, { annotationOpen: false, screenshotData: null }) })),
+
+  setAnnotationTool: (projectPath, tool) =>
+    set((s) => ({ states: updateState(s.states, projectPath, { annotationTool: tool }) })),
+
+  setAnnotationColor: (projectPath, color) =>
+    set((s) => ({ states: updateState(s.states, projectPath, { annotationColor: color }) })),
+
+  setAnnotationStrokeWidth: (projectPath, width) =>
+    set((s) => ({ states: updateState(s.states, projectPath, { annotationStrokeWidth: width }) })),
 
   removeProject: (projectPath) => {
     invoke("destroy_browser_webview", { projectId: projectPath }).catch(() => {});

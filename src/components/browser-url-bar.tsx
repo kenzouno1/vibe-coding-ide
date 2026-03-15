@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { ArrowLeft, ArrowRight, RotateCw, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, RotateCw, Loader2, Camera } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useBrowserStore } from "@/stores/browser-store";
 
@@ -83,6 +83,14 @@ export function BrowserUrlBar({ projectPath }: BrowserUrlBarProps) {
     }
   }, [projectPath]);
 
+  const captureScreenshot = useCallback(async () => {
+    try {
+      await invoke("capture_browser_screenshot", { projectId: projectPath });
+    } catch (err) {
+      console.error("Screenshot failed:", err);
+    }
+  }, [projectPath]);
+
   return (
     <div className="flex items-center gap-1 px-2 py-1.5 bg-ctp-mantle border-b border-ctp-surface0">
       {/* Navigation buttons */}
@@ -124,6 +132,15 @@ export function BrowserUrlBar({ projectPath }: BrowserUrlBarProps) {
         className="flex-1 px-3 py-1 rounded bg-ctp-base border border-ctp-surface0 text-ctp-text text-sm
                    placeholder:text-ctp-overlay0 focus:outline-none focus:border-ctp-mauve transition-colors"
       />
+
+      {/* Screenshot button */}
+      <button
+        onClick={captureScreenshot}
+        title="Take screenshot"
+        className="p-1.5 rounded hover:bg-ctp-surface0 text-ctp-overlay1 hover:text-ctp-mauve transition-colors"
+      >
+        <Camera size={16} />
+      </button>
 
       {/* Page title (truncated) */}
       {browserState.title && (

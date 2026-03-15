@@ -1,5 +1,6 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
 use tauri::webview::{PageLoadEvent, WebviewBuilder};
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, Rect, WebviewUrl};
 
@@ -349,4 +350,121 @@ pub async fn destroy_browser_webview(
         webview.close().map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+/// Trigger screenshot capture in the browser webview.
+/// Injects JS that captures the page as a canvas data URL and sends it back via IPC.
+#[tauri::command]
+pub async fn capture_browser_screenshot(
+    app: tauri::AppHandle,
+    project_id: String,
+) -> Result<(), String> {
+    let label = webview_label(&project_id);
+    let webview = get_child_webview(&app, &label)?;
+
+    // Inject a script that captures the visible viewport as a PNG data URL.
+    // Uses a simple approach: create an offscreen canvas from document content.
+    let capture_script = r#"
+    (async function() {
+      try {
+        // Use html2canvas if available, otherwise fallback to simple body capture
+        var canvas = document.createElement('canvas');
+        var rect = document.documentElement.getBoundingClientRect();
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        var ctx = canvas.getContext('2d');
+
+        // Attempt to draw using SVG foreignObject approach
+        var data = '<svg xmlns="http://www.w3.org/2000/svg" width="' + canvas.width + '" height="' + canvas.height + '">' +
+          '<foreignObject width="100%" height="100%">' +
+          new XMLSerializer().serializeToString(document.documentElement) +
+          '</foreignObject></svg>';
+
+        var img = new Image();
+        var svgBlob = new Blob([data], {type: 'image/svg+xml;charset=utf-8'});
+        var url = URL.createObjectURL(svgBlob);
+
+        img.onload = function() {
+          ctx.drawImage(img, 0, 0);
+          URL.revokeObjectURL(url);
+          var dataUrl = canvas.toDataURL('image/png');
+          if (window.__TAURI__ && window.__TAURI__.core) {
+            window.__TAURI__.core.invoke('receive_browser_screenshot', { dataUrl: dataUrl });
+          }
+        };
+        img.onerror = function() {
+          URL.revokeObjectURL(url);
+          // Fallback: send a blank screenshot signal
+          if (window.__TAURI__ && window.__TAURI__.core) {
+            window.__TAURI__.core.invoke('receive_browser_screenshot', { dataUrl: '' });
+          }
+        };
+        img.src = url;
+      } catch(e) {
+        if (window.__TAURI__ && window.__TAURI__.core) {
+          window.__TAURI__.core.invoke('receive_browser_screenshot', { dataUrl: '' });
+        }
+      }
+    })();
+    "#;
+
+    webview.eval(capture_script).map_err(|e| e.to_string())
+}
+
+/// Receive screenshot data URL from the browser webview and relay to frontend
+#[tauri::command]
+pub async fn receive_browser_screenshot(
+    app: tauri::AppHandle,
+    data_url: String,
+) -> Result<(), String> {
+    let _ = app.emit("browser-screenshot-captured", serde_json::json!({ "dataUrl": data_url }));
+    Ok(())
+}
+
+/// Save an annotated screenshot to the project's .devtools/screenshots/ directory
+#[tauri::command]
+pub async fn write_screenshot(
+    project_path: String,
+    filename: String,
+    data: String,
+) -> Result<String, String> {
+    let dir = PathBuf::from(&project_path).join(".devtools/screenshots");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {e}"))?;
+    let path = dir.join(&filename);
+
+    // Decode base64 data
+    use std::io::Write;
+    let bytes = base64_decode(&data)?;
+    let mut file = std::fs::File::create(&path).map_err(|e| format!("Failed to create file: {e}"))?;
+    file.write_all(&bytes).map_err(|e| format!("Failed to write: {e}"))?;
+
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Simple base64 decoder (no external dependency)
+fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut output = Vec::new();
+    let mut buf: u32 = 0;
+    let mut bits: u32 = 0;
+
+    for &byte in input.as_bytes() {
+        let val = if byte == b'=' {
+            break;
+        } else if let Some(pos) = TABLE.iter().position(|&c| c == byte) {
+            pos as u32
+        } else if byte == b'\n' || byte == b'\r' || byte == b' ' {
+            continue;
+        } else {
+            return Err(format!("Invalid base64 character: {}", byte as char));
+        };
+        buf = (buf << 6) | val;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            output.push((buf >> bits) as u8);
+            buf &= (1 << bits) - 1;
+        }
+    }
+    Ok(output)
 }
