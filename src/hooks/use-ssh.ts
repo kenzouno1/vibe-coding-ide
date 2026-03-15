@@ -56,7 +56,7 @@ export function useSsh(
   const write = useCallback(
     (data: string) => {
       if (sessionId) {
-        invoke("ssh_write", { id: sessionId, channel_id: channelId, data });
+        invoke("ssh_write", { id: sessionId, channelId, data });
       }
     },
     [sessionId, channelId],
@@ -65,7 +65,7 @@ export function useSsh(
   const resize = useCallback(
     (rows: number, cols: number) => {
       if (sessionId) {
-        invoke("ssh_resize", { id: sessionId, channel_id: channelId, rows, cols });
+        invoke("ssh_resize", { id: sessionId, channelId, rows, cols });
       }
     },
     [sessionId, channelId],

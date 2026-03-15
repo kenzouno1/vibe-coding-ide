@@ -79,9 +79,9 @@ export const useSshStore = create<SshStore>((set, get) => ({
       host: preset.host,
       port: preset.port,
       username: preset.username,
-      auth_method: preset.auth_method,
+      authMethod: preset.auth_method,
       password: password ?? null,
-      private_key_path: preset.private_key_path ?? null,
+      privateKeyPath: preset.private_key_path ?? null,
     });
 
     // Get the initial leaf pane ID from pane-store (lazily creates tree for sessionId)
@@ -142,7 +142,7 @@ export const useSshStore = create<SshStore>((set, get) => ({
 
   openChannel: async (sessionId, paneId) => {
     try {
-      const channelId = await invoke<string>("ssh_open_channel", { session_id: sessionId });
+      const channelId = await invoke<string>("ssh_open_channel", { sessionId });
       set((s) => {
         const conn = s.connections[sessionId];
         if (!conn) return s;
@@ -166,7 +166,7 @@ export const useSshStore = create<SshStore>((set, get) => ({
     const channelId = conn?.channelMap[paneId];
     if (channelId && channelId !== "default") {
       try {
-        await invoke("ssh_close_channel", { session_id: sessionId, channel_id: channelId });
+        await invoke("ssh_close_channel", { sessionId, channelId });
       } catch (e) {
         console.error("Failed to close SSH channel:", e);
       }
@@ -250,9 +250,9 @@ export const useSshStore = create<SshStore>((set, get) => ({
       host: preset.host,
       port: preset.port,
       username: preset.username,
-      auth_method: preset.auth_method,
+      authMethod: preset.auth_method,
       password: conn.password ?? null,
-      private_key_path: preset.private_key_path ?? null,
+      privateKeyPath: preset.private_key_path ?? null,
     };
   },
 

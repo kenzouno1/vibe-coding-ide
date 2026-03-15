@@ -47,7 +47,8 @@ export const SftpTreeNode = memo(function SftpTreeNode({
         const result = await invoke<SftpEntry[]>("sftp_list_dir", {
           ...credentials,
           password: null,
-          private_key_path: credentials.private_key_path ?? null,
+          privateKeyPath: credentials.private_key_path ?? null,
+          authMethod: credentials.auth_method,
           path: entry.path,
         });
         setChildren(result);
