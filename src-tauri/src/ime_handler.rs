@@ -125,7 +125,7 @@ mod platform {
             let _ = SetWindowSubclass(hwnd, Some(ime_subclass_proc), 1, 0);
 
             // Also subclass all child windows (WebView2 creates child HWNDs)
-            let _ = EnumChildWindows(Some(hwnd), Some(enum_child_callback), LPARAM(0));
+            let _ = EnumChildWindows(hwnd, Some(enum_child_callback), LPARAM(0));
         }
 
         log::info!("IME handler installed on window");
