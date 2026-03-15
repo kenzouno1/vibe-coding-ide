@@ -103,6 +103,8 @@ async fn setup_channel(
     let otx = output_tx.clone();
 
     let reader_handle = tokio::spawn(async move {
+        // Wait for frontend to mount terminal component and setup event listener
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         log::info!("SSH reader started: session={sid}, channel={lbl}");
         let mut reader = read_half;
         let mut buf = [0u8; 4096];

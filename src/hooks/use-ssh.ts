@@ -28,12 +28,15 @@ export function useSsh(
     let destroyed = false;
 
     async function setup() {
+      console.log("[use-ssh] Setting up listener for", sessionId, channelId);
       const unlisten = await listen<SshOutput>("ssh-output", (event) => {
+        console.log("[use-ssh] Event received:", event.payload.id, event.payload.channel_id, "data len:", event.payload.data?.length);
         if (
           !destroyed &&
           event.payload.id === sessionId &&
           event.payload.channel_id === channelId
         ) {
+          console.log("[use-ssh] Matched! Writing to terminal");
           onDataRef.current(event.payload.data);
         }
       });
