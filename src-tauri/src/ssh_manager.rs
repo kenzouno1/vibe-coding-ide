@@ -191,8 +191,17 @@ pub async fn ssh_connect(
             let key_path = private_key_path
                 .as_deref()
                 .ok_or("Private key path required")?;
-            let key_pair = russh_keys::load_secret_key(key_path, password.as_deref())
-                .map_err(|e| format!("Load key failed (ensure OpenSSH PEM format, not PuTTY PPK): {e}"))?;
+            // Read key file manually, normalize CRLF → LF, ensure trailing newline
+            let raw = std::fs::read_to_string(key_path)
+                .map_err(|e| format!("Read key file failed: {e}"))?;
+            let normalized = raw.replace("\r\n", "\n");
+            let normalized = if normalized.ends_with('\n') {
+                normalized
+            } else {
+                format!("{normalized}\n")
+            };
+            let key_pair = russh_keys::decode_secret_key(&normalized, password.as_deref())
+                .map_err(|e| format!("Load key failed: {e}"))?;
             let key_with_alg = russh_keys::key::PrivateKeyWithHashAlg::new(
                 Arc::new(key_pair),
                 None,
