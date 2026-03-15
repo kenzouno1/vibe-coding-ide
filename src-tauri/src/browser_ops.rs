@@ -22,11 +22,15 @@ fn get_child_webview(
 
 /// JS bridge injected into every page loaded in the browser webview.
 /// Overrides console.log/warn/error/info and captures uncaught errors.
-/// Uses Tauri IPC invoke (forward_console_log command) to relay logs to main app.
+/// Stores logs in __DEVTOOLS_LOGS__ buffer. Rust polls via eval() to flush.
+/// This approach works on ALL pages (external URLs, CORS, CSP) because
+/// it doesn't require Tauri IPC from the child webview.
 const CONSOLE_BRIDGE_SCRIPT: &str = r#"
 (function() {
   if (window.__DEVTOOLS_BRIDGE__) return;
   window.__DEVTOOLS_BRIDGE__ = true;
+  window.__DEVTOOLS_LOGS__ = [];
+  window.__DEVTOOLS_SELECTION__ = null;
 
   var orig = {
     log: console.log.bind(console),
@@ -48,26 +52,16 @@ const CONSOLE_BRIDGE_SCRIPT: &str = r#"
     return parts.join(' ');
   }
 
-  function tauriInvoke(cmd, args) {
-    // In child webviews loading external URLs, window.__TAURI__ (from @tauri-apps/api)
-    // is NOT available because the npm package is not loaded on external pages.
-    // Use window.__TAURI_INTERNALS__.invoke instead — this is the low-level IPC
-    // that Tauri injects into ALL webviews via initialization_script.
-    try {
-      if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {
-        window.__TAURI_INTERNALS__.invoke(cmd, args);
-      }
-    } catch(e) {}
-  }
-
   function send(level, args) {
     orig[level].apply(console, args);
-    tauriInvoke('forward_console_log', {
-      level: level,
-      message: ser(args),
-      timestamp: Date.now(),
-      pageUrl: location.href
-    });
+    if (window.__DEVTOOLS_LOGS__.length < 500) {
+      window.__DEVTOOLS_LOGS__.push({
+        level: level,
+        message: ser(args),
+        timestamp: Date.now(),
+        url: location.href
+      });
+    }
   }
 
   console.log = function() { send('log', arguments); };
@@ -86,16 +80,16 @@ const CONSOLE_BRIDGE_SCRIPT: &str = r#"
     send('error', ['Unhandled Promise: ' + reason]);
   });
 
-  // Text selection bridge — Ctrl+Shift+S sends selected text to terminal
+  // Text selection bridge — Ctrl+Shift+S stores selection for Rust to poll
   document.addEventListener('keydown', function(ev) {
     if (ev.ctrlKey && ev.shiftKey && ev.key === 'S') {
       ev.preventDefault();
       var sel = window.getSelection();
       if (sel && sel.toString().trim()) {
-        tauriInvoke('forward_browser_selection', {
+        window.__DEVTOOLS_SELECTION__ = {
           text: sel.toString(),
-          pageUrl: location.href
-        });
+          url: location.href
+        };
       }
     }
   });
@@ -201,6 +195,25 @@ pub async fn create_browser_webview(
             );
         })
         .on_document_title_changed(move |_webview, title| {
+            // Intercept console log flush signal from polling thread
+            if title.starts_with("__DEVTOOLS_FLUSH__") {
+                let json_data = &title["__DEVTOOLS_FLUSH__".len()..];
+                if let Ok(logs) = serde_json::from_str::<Vec<serde_json::Value>>(json_data) {
+                    for log in logs {
+                        let _ = app_for_title.emit(
+                            "browser-console",
+                            serde_json::json!({
+                                "label": label_for_title,
+                                "level": log.get("level").and_then(|v| v.as_str()).unwrap_or("log"),
+                                "message": log.get("message").and_then(|v| v.as_str()).unwrap_or(""),
+                                "timestamp": log.get("timestamp").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                "url": log.get("url").and_then(|v| v.as_str()).unwrap_or(""),
+                            }),
+                        );
+                    }
+                }
+                return;
+            }
             let _ = app_for_title.emit(
                 "browser-title-changed",
                 serde_json::json!({
@@ -217,6 +230,60 @@ pub async fn create_browser_webview(
             LogicalSize::new(width, height),
         )
         .map_err(|e| format!("Failed to create webview: {e}"))?;
+
+    // Start a polling thread to flush console logs from the child webview.
+    // This is necessary because external URLs can't use Tauri IPC (invoke) —
+    // the JS bridge stores logs in window.__DEVTOOLS_LOGS__ and we eval() to retrieve them.
+    let poll_app = app.clone();
+    let poll_label = label.clone();
+    std::thread::spawn(move || {
+        let _flush_script = r#"
+            (function() {
+                var logs = window.__DEVTOOLS_LOGS__ || [];
+                window.__DEVTOOLS_LOGS__ = [];
+                var sel = window.__DEVTOOLS_SELECTION__;
+                window.__DEVTOOLS_SELECTION__ = null;
+                return JSON.stringify({ logs: logs, selection: sel });
+            })()
+        "#;
+
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+
+            // Check if webview still exists
+            let webview = match poll_app.get_webview(&poll_label) {
+                Some(w) => w,
+                None => break,
+            };
+
+            // Eval returns void in Tauri — we can't get the return value directly.
+            // Instead, inject a script that sets document.title to a special prefix
+            // with the data, then read it via on_document_title_changed.
+            // But that's hacky. Better approach: inject a script that writes to
+            // a hidden element we can query.
+            //
+            // Simplest: use eval to call postMessage back to ourselves, but that
+            // won't work cross-origin either.
+            //
+            // ACTUAL simplest: Use eval to set window.name (readable from Rust? No.)
+            //
+            // Let's use the title-based signaling approach:
+            let signal_script = r#"
+                (function() {
+                    var logs = window.__DEVTOOLS_LOGS__ || [];
+                    if (logs.length === 0) return;
+                    window.__DEVTOOLS_LOGS__ = [];
+                    var realTitle = document.title;
+                    document.title = '__DEVTOOLS_FLUSH__' + JSON.stringify(logs);
+                    setTimeout(function() { document.title = realTitle; }, 50);
+                })()
+            "#;
+
+            if webview.eval(signal_script).is_err() {
+                break;
+            }
+        }
+    });
 
     Ok(())
 }
