@@ -110,19 +110,6 @@ impl SshState {
         }
     }
 
-    /// List session info for agent API
-    pub async fn list_sessions_info(&self) -> Vec<SessionInfo> {
-        let sessions = self.sessions.lock().await;
-        sessions
-            .iter()
-            .map(|(id, s)| SessionInfo {
-                session_id: id.clone(),
-                host: s.host.clone(),
-                username: s.username.clone(),
-                channels: s.channels.keys().cloned().collect(),
-            })
-            .collect()
-    }
 }
 
 #[derive(Serialize, Clone)]
