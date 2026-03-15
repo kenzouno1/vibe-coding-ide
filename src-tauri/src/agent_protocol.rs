@@ -43,6 +43,7 @@ pub enum AgentRequest {
     },
 
     #[serde(rename = "open_channel")]
+    #[allow(dead_code)]
     OpenChannel { id: u64, session_id: String },
 
     #[serde(rename = "resize")]

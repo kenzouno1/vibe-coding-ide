@@ -159,7 +159,7 @@ async fn write_ch(state: &AgentState, sid: &str, cid: &str, data: &str) -> Resul
     r
 }
 
-async fn resize_ch(state: &AgentState, _sid: &str, _cid: &str, _rows: u16, _cols: u16) -> Result<(), String> {
+async fn resize_ch(_state: &AgentState, _sid: &str, _cid: &str, _rows: u16, _cols: u16) -> Result<(), String> {
     // Resize not available via ChannelStream — PTY opened with default size
     Ok(())
 }

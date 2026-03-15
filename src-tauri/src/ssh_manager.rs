@@ -319,16 +319,13 @@ pub async fn ssh_write(
 
 #[tauri::command]
 pub async fn ssh_resize(
-    state: tauri::State<'_, SshState>,
-    id: String,
-    channel_id: Option<String>,
-    rows: u16,
-    cols: u16,
+    _state: tauri::State<'_, SshState>,
+    _id: String,
+    _channel_id: Option<String>,
+    _rows: u16,
+    _cols: u16,
 ) -> Result<(), String> {
-    // Resize goes through Handle — not through the stream
-    // ChannelStream doesn't expose window_change, so we skip resize for now.
-    // The PTY was opened with 80x24, xterm will handle display regardless.
-    // TODO: implement resize via raw SSH channel request if needed
+    // ChannelStream doesn't expose window_change — PTY uses initial 80x24
     Ok(())
 }
 
