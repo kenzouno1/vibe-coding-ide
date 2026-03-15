@@ -39,10 +39,19 @@ export const SshTerminal = memo(function SshTerminal({
     term.loadAddon(fitAddon);
 
     term.open(containerRef.current);
-    fitAddon.fit();
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
+
+    // Multiple fit attempts — container may have 0 size initially
+    // due to visibility toggling and flex layout settling
+    requestAnimationFrame(() => fitAddon.fit());
+    setTimeout(() => fitAddon.fit(), 100);
+    setTimeout(() => fitAddon.fit(), 500);
+    setTimeout(() => {
+      fitAddon.fit();
+      resize(term.rows, term.cols);
+    }, 1000);
 
     // IME handler for Vietnamese input
     const { state: imeState, cleanup: imeCleanup } = setupImeHandler(
@@ -77,11 +86,13 @@ export const SshTerminal = memo(function SshTerminal({
       return true;
     });
 
-    // Delayed initial resize
+    // Delayed initial resize — use rAF to ensure layout is resolved
     setTimeout(() => {
-      fitAddon.fit();
-      resize(term.rows, term.cols);
-    }, 500);
+      requestAnimationFrame(() => {
+        fitAddon.fit();
+        resize(term.rows, term.cols);
+      });
+    }, 300);
 
     const resizeObserver = new ResizeObserver(() => {
       if (viewRef.current !== "ssh") return;
@@ -104,12 +115,12 @@ export const SshTerminal = memo(function SshTerminal({
   // Re-fit when SSH view becomes visible
   useEffect(() => {
     if (view === "ssh" && fitAddonRef.current && termRef.current) {
-      setTimeout(() => {
+      requestAnimationFrame(() => {
         fitAddonRef.current?.fit();
         if (termRef.current) {
           resize(termRef.current.rows, termRef.current.cols);
         }
-      }, 50);
+      });
     }
   }, [view, resize]);
 
