@@ -149,21 +149,50 @@ pub async fn ssh_connect(
         .await
         .map_err(|e| format!("SSH connect failed: {e}"))?;
 
-    // Authenticate
+    // Authenticate — try primary method, then fallback
     let auth_ok = match auth_method.as_str() {
         "password" => {
             let pw = password.as_deref().unwrap_or("");
-            handle
+            // Try password auth first
+            let ok = handle
                 .authenticate_password(&username, pw)
                 .await
-                .map_err(|e| format!("Auth failed: {e}"))?
+                .map_err(|e| format!("Password auth failed: {e}"))?;
+            if ok {
+                true
+            } else {
+                // Fallback: keyboard-interactive (many SSH servers use this instead)
+                use russh::client::KeyboardInteractiveAuthResponse;
+                match handle
+                    .authenticate_keyboard_interactive_start(&username, None::<String>)
+                    .await
+                {
+                    Ok(KeyboardInteractiveAuthResponse::Success) => true,
+                    Ok(KeyboardInteractiveAuthResponse::Failure) => false,
+                    Ok(KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. }) => {
+                        // Server asks for responses — send password for each prompt
+                        let responses: Vec<String> = prompts
+                            .iter()
+                            .map(|_| pw.to_string())
+                            .collect();
+                        match handle
+                            .authenticate_keyboard_interactive_respond(responses)
+                            .await
+                        {
+                            Ok(KeyboardInteractiveAuthResponse::Success) => true,
+                            _ => false,
+                        }
+                    }
+                    Err(_) => false,
+                }
+            }
         }
         "key" => {
             let key_path = private_key_path
                 .as_deref()
                 .ok_or("Private key path required")?;
             let key_pair = russh_keys::load_secret_key(key_path, password.as_deref())
-                .map_err(|e| format!("Load key failed: {e}"))?;
+                .map_err(|e| format!("Load key failed (ensure OpenSSH PEM format, not PuTTY PPK): {e}"))?;
             let key_with_alg = russh_keys::key::PrivateKeyWithHashAlg::new(
                 Arc::new(key_pair),
                 None,
@@ -178,7 +207,7 @@ pub async fn ssh_connect(
     };
 
     if !auth_ok {
-        return Err("Authentication failed".to_string());
+        return Err("Authentication failed. For key auth, ensure the key is in OpenSSH PEM format (not PuTTY PPK). Use 'ssh-keygen -i -f key.ppk > key.pem' to convert.".to_string());
     }
 
     // Open default channel with PTY + shell
