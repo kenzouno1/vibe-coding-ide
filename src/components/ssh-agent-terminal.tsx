@@ -3,7 +3,6 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { usePty } from "@/hooks/use-pty";
-import { setupImeHandler } from "@/hooks/use-ime-handler";
 import { useAppStore } from "@/stores/app-store";
 import { XTERM_OPTIONS } from "@/utils/xterm-config";
 
@@ -41,17 +40,11 @@ export const SshAgentTerminal = memo(function SshAgentTerminal() {
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    const { state: imeState, cleanup: imeCleanup } = setupImeHandler(
-      containerRef.current,
-      write,
-    );
-
     term.onData((data) => {
-      if (!imeState.composing) write(data);
+      write(data);
     });
 
     term.attachCustomKeyEventHandler((e) => {
-      if (imeState.composing) return false;
       if (e.type === "keydown" && e.ctrlKey && e.key === "c" && term.hasSelection()) {
         navigator.clipboard.writeText(term.getSelection());
         return false;
@@ -79,17 +72,22 @@ export const SshAgentTerminal = memo(function SshAgentTerminal() {
       });
     }, 800);
 
-    // Re-render terminal when window regains focus (canvas content lost while hidden)
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        requestAnimationFrame(() => {
-          fitAddon.fit();
-          resize(term.rows, term.cols);
-          term.refresh(0, term.rows - 1);
-        });
-      }
+    // Re-render terminal when window regains focus (canvas content lost while hidden).
+    // visibilitychange covers minimize/restore; window focus covers alt-tab
+    // (Tauri desktop windows don't change visibilityState on alt-tab).
+    const refreshTerminal = () => {
+      requestAnimationFrame(() => {
+        fitAddon.fit();
+        resize(term.rows, term.cols);
+        term.refresh(0, term.rows - 1);
+      });
     };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshTerminal();
+    };
+    const onWindowFocus = () => refreshTerminal();
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onWindowFocus);
 
     const resizeObserver = new ResizeObserver(() => {
       if (viewRef.current !== "ssh") return;
@@ -103,7 +101,7 @@ export const SshAgentTerminal = memo(function SshAgentTerminal() {
 
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      imeCleanup();
+      window.removeEventListener("focus", onWindowFocus);
       resizeObserver.disconnect();
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
       term.dispose();
@@ -114,7 +112,10 @@ export const SshAgentTerminal = memo(function SshAgentTerminal() {
     if (view === "ssh" && fitAddonRef.current && termRef.current) {
       requestAnimationFrame(() => {
         fitAddonRef.current?.fit();
-        if (termRef.current) resize(termRef.current.rows, termRef.current.cols);
+        if (termRef.current) {
+          resize(termRef.current.rows, termRef.current.cols);
+          termRef.current.refresh(0, termRef.current.rows - 1);
+        }
       });
     }
   }, [view, resize]);

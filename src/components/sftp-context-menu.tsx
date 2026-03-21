@@ -5,6 +5,7 @@ import {
   FilePlus,
   FolderPlus,
   Pencil,
+  FileEdit,
   Copy,
   Shield,
   Download,
@@ -22,6 +23,7 @@ interface SftpContextMenuProps {
   credentials: Record<string, unknown>;
   onClose: () => void;
   onRefresh: () => void;
+  onEdit: (remotePath: string) => void;
 }
 
 export function SftpContextMenu({
@@ -32,6 +34,7 @@ export function SftpContextMenu({
   credentials,
   onClose,
   onRefresh,
+  onEdit,
 }: SftpContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -193,6 +196,9 @@ export function SftpContextMenu({
 
   // Entry-specific actions
   if (entry) {
+    if (!entry.is_dir) {
+      items.push({ icon: FileEdit, label: "Edit", action: () => { onEdit(entry.path); onClose(); } });
+    }
     items.push({ icon: Pencil, label: "Rename", action: handleRename });
     if (!entry.is_dir) {
       items.push({ icon: Copy, label: "Copy", action: handleCopy });

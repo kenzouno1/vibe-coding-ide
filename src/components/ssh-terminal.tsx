@@ -3,7 +3,6 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { useSsh } from "@/hooks/use-ssh";
-import { setupImeHandler } from "@/hooks/use-ime-handler";
 import { useAppStore } from "@/stores/app-store";
 import { XTERM_OPTIONS } from "@/utils/xterm-config";
 
@@ -53,20 +52,12 @@ export const SshTerminal = memo(function SshTerminal({
       resize(term.rows, term.cols);
     }, 1000);
 
-    // IME handler for Vietnamese input
-    const { state: imeState, cleanup: imeCleanup } = setupImeHandler(
-      containerRef.current,
-      write,
-    );
-
-    // Forward keystrokes to SSH, skip during IME composition
     term.onData((data) => {
-      if (!imeState.composing) write(data);
+      write(data);
     });
 
-    // Handle copy and block keys during IME
+    // Handle copy (Ctrl+C) and paste (Ctrl+V)
     term.attachCustomKeyEventHandler((e) => {
-      if (imeState.composing) return false;
       if (
         e.type === "keydown" &&
         e.ctrlKey &&
@@ -94,17 +85,22 @@ export const SshTerminal = memo(function SshTerminal({
       });
     }, 300);
 
-    // Re-render terminal when window regains focus (canvas content lost while hidden)
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        requestAnimationFrame(() => {
-          fitAddon.fit();
-          resize(term.rows, term.cols);
-          term.refresh(0, term.rows - 1);
-        });
-      }
+    // Re-render terminal when window regains focus (canvas content lost while hidden).
+    // visibilitychange covers minimize/restore; window focus covers alt-tab
+    // (Tauri desktop windows don't change visibilityState on alt-tab).
+    const refreshTerminal = () => {
+      requestAnimationFrame(() => {
+        fitAddon.fit();
+        resize(term.rows, term.cols);
+        term.refresh(0, term.rows - 1);
+      });
     };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshTerminal();
+    };
+    const onWindowFocus = () => refreshTerminal();
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onWindowFocus);
 
     const resizeObserver = new ResizeObserver(() => {
       if (viewRef.current !== "ssh") return;
@@ -118,7 +114,7 @@ export const SshTerminal = memo(function SshTerminal({
 
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      imeCleanup();
+      window.removeEventListener("focus", onWindowFocus);
       resizeObserver.disconnect();
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
       term.dispose();
@@ -132,6 +128,7 @@ export const SshTerminal = memo(function SshTerminal({
         fitAddonRef.current?.fit();
         if (termRef.current) {
           resize(termRef.current.rows, termRef.current.cols);
+          termRef.current.refresh(0, termRef.current.rows - 1);
         }
       });
     }

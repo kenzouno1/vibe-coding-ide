@@ -1,10 +1,11 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { usePaneStore } from "@/stores/pane-store";
+import { usePaneStore, collectLeafIds } from "@/stores/pane-store";
 import { useGitStore } from "@/stores/git-store";
 import { useEditorStore } from "@/stores/editor-store";
 import { useBrowserStore } from "@/stores/browser-store";
+import { useClaudeStore } from "@/stores/claude-store";
 
 const STORAGE_KEY_TABS = "devtools-open-tabs";
 const STORAGE_KEY_ACTIVE = "devtools-active-tab";
@@ -144,6 +145,18 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     if (activeTabPath === path) {
       // Activate adjacent tab
       newActive = newTabs[Math.min(idx, newTabs.length - 1)]?.path ?? null;
+    }
+
+    // Clean up Claude pane states before removing pane tree
+    const paneTree = usePaneStore.getState().trees[path];
+    if (paneTree) {
+      const leafIds = collectLeafIds(paneTree);
+      const paneStore = usePaneStore.getState();
+      for (const leafId of leafIds) {
+        if (paneStore.getPaneType(path, leafId) === "claude") {
+          useClaudeStore.getState().removePaneState(leafId);
+        }
+      }
     }
 
     // Clean up per-project state in other stores

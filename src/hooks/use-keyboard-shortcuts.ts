@@ -65,6 +65,21 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // F5: refresh browser panel (not the app). Ctrl+F5: refresh the app.
+      if (e.key === "F5") {
+        e.preventDefault();
+        if (isCtrl) {
+          window.location.reload();
+          return;
+        }
+        if (view === "browser") {
+          import("@tauri-apps/api/core").then(({ invoke }) => {
+            invoke("browser_reload", { projectId: project });
+          });
+        }
+        return;
+      }
+
       // Browser DevTools toggle (F12 in browser view)
       if (view === "browser" && e.key === "F12") {
         e.preventDefault();

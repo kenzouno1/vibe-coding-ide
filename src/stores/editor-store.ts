@@ -10,6 +10,17 @@ export interface EditorFileTab {
   language: string;
 }
 
+/** Metadata for files opened from SFTP remote servers */
+export interface RemoteFileInfo {
+  remotePath: string;
+  host: string;
+  port: number;
+  username: string;
+  authMethod: string;
+  password: string | null;
+  privateKeyPath: string | null;
+}
+
 interface ProjectEditorState {
   openFiles: EditorFileTab[];
   activeFilePath: string | null;
@@ -32,8 +43,12 @@ const DEFAULT_STATE: ProjectEditorState = {
 
 interface EditorStore {
   states: Record<string, ProjectEditorState>;
+  /** Map local temp path → remote file info for SFTP-opened files */
+  remoteFiles: Record<string, RemoteFileInfo>;
   getState: (projectPath: string) => ProjectEditorState;
   openFile: (projectPath: string, filePath: string) => Promise<void>;
+  /** Download remote file to temp, open in editor, track for save-back */
+  openRemoteFile: (projectPath: string, remotePath: string, credentials: RemoteFileInfo) => Promise<void>;
   closeFile: (projectPath: string, filePath: string) => void;
   setActiveFile: (projectPath: string, filePath: string) => void;
   setDirty: (projectPath: string, filePath: string, isDirty: boolean) => void;
@@ -60,6 +75,7 @@ function updateProjectState(
 
 export const useEditorStore = create<EditorStore>((set, get) => ({
   states: {},
+  remoteFiles: {},
 
   getState: (projectPath) => {
     return get().states[projectPath] || DEFAULT_STATE;
@@ -101,6 +117,31 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     }
   },
 
+  openRemoteFile: async (projectPath, remotePath, credentials) => {
+    try {
+      // Download to temp
+      const localPath = await invoke<string>("sftp_download_to_temp", {
+        host: credentials.host,
+        port: credentials.port,
+        username: credentials.username,
+        authMethod: credentials.authMethod,
+        password: credentials.password,
+        privateKeyPath: credentials.privateKeyPath,
+        remotePath,
+      });
+
+      // Track remote mapping
+      set((s) => ({
+        remoteFiles: { ...s.remoteFiles, [localPath]: credentials },
+      }));
+
+      // Open in editor (reuse existing openFile logic)
+      await get().openFile(projectPath, localPath);
+    } catch (err) {
+      console.error("Failed to open remote file:", err);
+    }
+  },
+
   closeFile: (projectPath, filePath) => {
     set((s) => {
       const current = s.states[projectPath] || DEFAULT_STATE;
@@ -113,11 +154,13 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         newActive = newFiles[Math.min(idx, newFiles.length - 1)]?.filePath ?? null;
       }
 
-      // Clean up view state and preview mode for closed file
+      // Clean up view state, preview mode, and remote file info for closed file
       const { [filePath]: _, ...remainingViewStates } = current.viewStates;
       const { [filePath]: __, ...remainingPreviewModes } = current.previewModes;
+      const { [filePath]: ___, ...remainingRemoteFiles } = s.remoteFiles;
 
       return {
+        remoteFiles: remainingRemoteFiles,
         states: updateProjectState(s.states, projectPath, {
           openFiles: newFiles,
           activeFilePath: newActive,
@@ -147,7 +190,24 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
 
   saveFile: async (projectPath, filePath, content) => {
     try {
+      // Save locally first
       await invoke("write_file", { path: filePath, content });
+
+      // If this is a remote SFTP file, upload back to server
+      const remote = get().remoteFiles[filePath];
+      if (remote) {
+        await invoke("sftp_upload", {
+          host: remote.host,
+          port: remote.port,
+          username: remote.username,
+          authMethod: remote.authMethod,
+          password: remote.password,
+          privateKeyPath: remote.privateKeyPath,
+          localPath: filePath,
+          remotePath: remote.remotePath,
+        });
+      }
+
       set((s) => {
         const current = s.states[projectPath] || DEFAULT_STATE;
         return {

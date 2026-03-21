@@ -22,6 +22,7 @@ interface SftpTreeNodeProps {
     private_key_path?: string;
   };
   onDownload: (remotePath: string) => void;
+  onEdit: (remotePath: string) => void;
   onDelete: (path: string, isDir: boolean) => void;
   onContextMenu: (e: React.MouseEvent, entry: SftpEntry) => void;
 }
@@ -31,6 +32,7 @@ export const SftpTreeNode = memo(function SftpTreeNode({
   depth,
   credentials,
   onDownload,
+  onEdit,
   onDelete,
   onContextMenu,
 }: SftpTreeNodeProps) {
@@ -70,9 +72,9 @@ export const SftpTreeNode = memo(function SftpTreeNode({
 
   const handleDoubleClick = useCallback(() => {
     if (!entry.is_dir) {
-      onDownload(entry.path);
+      onEdit(entry.path);
     }
-  }, [entry.is_dir, entry.path, onDownload]);
+  }, [entry.is_dir, entry.path, onEdit]);
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
@@ -142,6 +144,7 @@ export const SftpTreeNode = memo(function SftpTreeNode({
             depth={depth + 1}
             credentials={credentials}
             onDownload={onDownload}
+            onEdit={onEdit}
             onDelete={onDelete}
             onContextMenu={onContextMenu}
           />

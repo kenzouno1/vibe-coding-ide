@@ -368,6 +368,53 @@ pub async fn sftp_copy(
         .map_err(|e| format!("Write dst failed: {e}"))
 }
 
+/// Download remote file to OS temp directory for editing.
+/// Returns the local temp file path.
+#[tauri::command]
+pub async fn sftp_download_to_temp(
+    host: String,
+    port: u16,
+    username: String,
+    auth_method: String,
+    password: Option<String>,
+    private_key_path: Option<String>,
+    remote_path: String,
+) -> Result<String, String> {
+    let sftp = create_sftp_session(
+        &host, port, &username, &auth_method,
+        password.as_deref(), private_key_path.as_deref(),
+    ).await?;
+
+    use tokio::io::AsyncReadExt;
+    let mut file = sftp
+        .open(&remote_path)
+        .await
+        .map_err(|e| format!("Open remote file failed: {e}"))?;
+
+    let mut contents = Vec::new();
+    file.read_to_end(&mut contents)
+        .await
+        .map_err(|e| format!("Read failed: {e}"))?;
+
+    // Build temp path: {temp}/devtools-sftp/{host}/{remote_path}
+    let temp_dir = std::env::temp_dir();
+    let sanitized = remote_path.trim_start_matches('/');
+    let local_path = temp_dir
+        .join("devtools-sftp")
+        .join(&host)
+        .join(sanitized);
+
+    if let Some(parent) = local_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Create temp dir failed: {e}"))?;
+    }
+
+    std::fs::write(&local_path, &contents)
+        .map_err(|e| format!("Write temp file failed: {e}"))?;
+
+    Ok(local_path.to_string_lossy().to_string())
+}
+
 /// Get file/dir metadata
 #[tauri::command]
 pub async fn sftp_stat(

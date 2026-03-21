@@ -5,6 +5,7 @@ import { RefreshCw, Upload, FolderPlus, FilePlus } from "lucide-react";
 import { SftpTreeNode } from "@/components/sftp-tree-node";
 import { SftpContextMenu } from "@/components/sftp-context-menu";
 import { useSshStore } from "@/stores/ssh-store";
+import { useEditorStore } from "@/stores/editor-store";
 import type { SftpEntry } from "@/stores/ssh-types";
 
 interface SftpBrowserProps {
@@ -120,6 +121,29 @@ export function SftpBrowser({ sessionId }: SftpBrowserProps) {
       }
     },
     [creds],
+  );
+
+  const handleEdit = useCallback(
+    async (remotePath: string) => {
+      if (!creds) return;
+
+      try {
+        setOpError(null);
+        // Open in editor store keyed by sessionId — renders in SSH panel's embedded editor
+        await useEditorStore.getState().openRemoteFile(sessionId, remotePath, {
+          remotePath,
+          host: creds.host as string,
+          port: creds.port as number,
+          username: creds.username as string,
+          authMethod: creds.authMethod as string,
+          password: (creds.password as string) ?? null,
+          privateKeyPath: (creds.privateKeyPath as string) ?? null,
+        });
+      } catch (err) {
+        setOpError(`Edit failed: ${err}`);
+      }
+    },
+    [creds, sessionId],
   );
 
   const handleDelete = useCallback(
@@ -250,6 +274,7 @@ export function SftpBrowser({ sessionId }: SftpBrowserProps) {
               depth={0}
               credentials={treeCreds}
               onDownload={handleDownload}
+              onEdit={handleEdit}
               onDelete={handleDelete}
               onContextMenu={handleTreeContextMenu}
             />
@@ -271,6 +296,7 @@ export function SftpBrowser({ sessionId }: SftpBrowserProps) {
           credentials={creds}
           onClose={() => setContextMenu(null)}
           onRefresh={handleRefresh}
+          onEdit={handleEdit}
         />
       )}
     </div>

@@ -643,6 +643,9 @@ pub async fn open_browser_devtools(
 ) -> Result<(), String> {
     let label = webview_label(&project_id);
     let webview = get_child_webview(&app, &label)?;
+    #[cfg(debug_assertions)]
     webview.open_devtools();
+    #[cfg(not(debug_assertions))]
+    let _ = &webview; // suppress unused warning in release
     Ok(())
 }
