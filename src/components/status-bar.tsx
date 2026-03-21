@@ -1,4 +1,4 @@
-import { GitBranch, Bot, TerminalSquare, ArrowLeftRight } from "lucide-react";
+import { GitBranch, Bot, TerminalSquare, ArrowLeftRight, Globe } from "lucide-react";
 import { useAppStore } from "@/stores/app-store";
 import { useGitStore } from "@/stores/git-store";
 import { useEditorStore } from "@/stores/editor-store";
@@ -75,6 +75,21 @@ export function StatusBar() {
             className="p-1 rounded hover:bg-ctp-surface0 text-ctp-overlay1 hover:text-ctp-mauve transition-colors"
           >
             <Bot size={14} />
+          </button>
+          <button
+            onClick={() => {
+              if (!activeTabPath) return;
+              const setView = useAppStore.getState().setView;
+              if (useAppStore.getState().view !== "terminal") setView("terminal");
+              const id = usePaneStore.getState().getActiveId(activeTabPath);
+              const rect = getPaneRect(id);
+              const dir = rect ? autoDirection(rect.width, rect.height) : "horizontal";
+              usePaneStore.getState().split(activeTabPath, id, dir, "browser");
+            }}
+            title="Add Browser pane (Ctrl+Shift+B)"
+            className="p-1 rounded hover:bg-ctp-surface0 text-ctp-overlay1 hover:text-ctp-blue transition-colors"
+          >
+            <Globe size={14} />
           </button>
           <button
             onClick={() => {
