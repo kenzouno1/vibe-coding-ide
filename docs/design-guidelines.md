@@ -105,11 +105,15 @@ Base unit: 4px. Scale: 0/1/2/3/4/5/6/8/10/12/16 (multiply by 4px).
 | Switch to Terminal | `Ctrl+1` |
 | Switch to Git | `Ctrl+2` |
 | Switch to Editor | `Ctrl+3` |
+| Switch to Browser | `Ctrl+4` |
+| Switch to SSH | `Ctrl+5` |
 | Next project tab | `Ctrl+Tab` |
 | Previous project tab | `Ctrl+Shift+Tab` |
 | **Terminal View** | |
 | Split horizontal | `Ctrl+Shift+H` |
 | Split vertical | `Ctrl+Shift+V` |
+| Split Claude pane | `Ctrl+Shift+C` |
+| Toggle split direction | `Ctrl+Shift+T` |
 | Close pane | `Ctrl+W` |
 | **Editor View** | |
 | Save file | `Ctrl+S` |
@@ -118,13 +122,36 @@ Base unit: 4px. Scale: 0/1/2/3/4/5/6/8/10/12/16 (multiply by 4px).
 | Commit | `Ctrl+Enter` (in commit box) |
 | Stage file | `S` (with file selected) |
 | Unstage file | `U` (with file selected) |
+| **SSH View** | |
+| Split horizontal | `Ctrl+Shift+H` |
+| Split vertical | `Ctrl+Shift+V` |
 
 ## Responsive Behavior
 
-Desktop-only (Electron). Minimum window: 800x500px.
+Desktop-only (Tauri). Minimum window: 800x500px.
 - Below 1000px width: sidebar collapses to icon-only
 - Below 900px: diff viewer forces inline mode
 - Split panes respect minimum sizes, redistribute on resize
+
+## Claude Chat UI
+
+### Message Bubble
+- User messages: `bg-surface` right-aligned, `text-primary`
+- Assistant messages: `bg-elevated` left-aligned
+- Tool use blocks: `bg-input` with code font, collapse/expand
+- Streaming indicator: animated dots or progress indicator
+
+### Input Area
+- Rich input with autocomplete for slash commands
+- File attachment chips: show thumbnail (image/PDF) or icon + filename
+- Attachment preview: ~60px chips, remove button on hover
+- Command history: up/down arrows cycle through /recent-commands
+- Multiline support: expand as needed
+
+### Model/Permission Selector
+- Dropdown in header: Model (Opus/Sonnet/Haiku), Permission (Default/Ask/Plan/Bypass)
+- Indicator badges: "streaming" state, cost display ($0.XX)
+- Read-only when stream in progress
 
 ## Accessibility
 

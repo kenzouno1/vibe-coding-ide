@@ -12,8 +12,10 @@ DevTools strips away the bloat and keeps only what matters:
 - **Git** — Stage, diff, commit. No menus, no wizards.
 - **Editor** — Monaco-powered, multi-tab file editing when you need to make a quick fix.
 - **Browser** — Embedded browser to preview your app without alt-tabbing.
+- **SSH** — Remote terminal & SFTP browser for server workflows.
+- **Claude Chat** — Embedded Claude AI with slash commands, file attachments, model selection.
 
-That's it. Four views. One sidebar. Zero distractions.
+That's it. Six views. One sidebar. Zero distractions.
 
 ## Why?
 
@@ -30,14 +32,16 @@ No setup wizards. No workspace configs. No "which extension should I install?" r
 
 ## Tech Stack
 
-| Layer    | Tech                          |
-| -------- | ----------------------------- |
-| Shell    | Tauri v2 (Rust)               |
-| Frontend | React 19, TypeScript, Vite    |
-| Styling  | Tailwind CSS v4, Catppuccin   |
-| Editor   | Monaco Editor                 |
-| Terminal | xterm.js + portable-pty       |
-| State    | Zustand                       |
+| Layer    | Tech                                      |
+| -------- | ----------------------------------------- |
+| Shell    | Tauri v2 (Rust)                           |
+| Frontend | React 19, TypeScript, Vite                |
+| Styling  | Tailwind CSS v4, Catppuccin               |
+| Editor   | Monaco Editor                             |
+| Terminal | xterm.js + portable-pty                   |
+| SSH      | russh (Rust async SSH client)             |
+| State    | Zustand                                   |
+| AI Chat  | Claude CLI integration (NDJSON streaming) |
 
 ## Getting Started
 
@@ -57,16 +61,20 @@ Requires: Node.js 18+, Rust toolchain, Tauri v2 CLI.
 ## Project Structure
 
 ```
-src/                    # React frontend
-  components/           # UI components (terminal, git, editor, browser)
-  stores/               # Zustand state management
-  hooks/                # Custom React hooks
-src-tauri/              # Rust backend
+src/                       # React frontend
+  components/              # UI components (terminal, git, editor, browser, ssh, claude)
+  stores/                  # Zustand state management
+  hooks/                   # Custom React hooks
+src-tauri/                 # Rust backend
   src/
-    lib.rs              # Tauri commands & PTY management
-    git_ops.rs          # Git operations
-    ssh_manager.rs      # SSH/SFTP support
-    browser_ops.rs      # Embedded browser logic
+    lib.rs                 # Tauri commands registry
+    pty_manager.rs         # Terminal PTY management
+    git_ops.rs             # Git operations
+    ssh_manager.rs         # SSH/SFTP support
+    browser_ops.rs         # Browser webview lifecycle
+    claude_manager.rs      # Claude CLI subprocess (NDJSON streaming)
+    agent_server.rs        # WebSocket server for Claude CLI integration
+    agent_protocol.rs      # Agent protocol message types
 ```
 
 ## License

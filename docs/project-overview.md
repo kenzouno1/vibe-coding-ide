@@ -9,6 +9,7 @@ DevTools is a lightweight, extensible desktop application for developers to mana
 ### Terminal View (Ctrl+1)
 - Multi-pane terminal emulator with xterm.js
 - Binary tree split layout (horizontal/vertical)
+- Terminal + Claude Chat pane splits (Ctrl+Shift+C)
 - Per-project terminal sessions persisted to disk
 - ANSI color support, mouse events, link detection
 
@@ -25,6 +26,27 @@ DevTools is a lightweight, extensible desktop application for developers to mana
 - Hierarchical file explorer with drag-friendly resizing
 - Auto-save via Ctrl+S, auto-language detection
 - File CRUD context menu with path traversal protection
+
+### Browser View (Ctrl+4)
+- Embedded web preview without alt-tabbing
+- Navigation controls (back/forward/reload)
+- Per-project isolated browser state
+
+### SSH View (Ctrl+5)
+- Remote terminal with xterm.js
+- SFTP file browser (left pane) + SSH terminal (right pane)
+- SSH preset management (save/load connection profiles)
+- SFTP operations: list, download, upload, delete, mkdir
+- SSH editor pane for editing remote files in Monaco
+
+### Claude Chat Pane (Terminal split)
+- Embedded AI chat integrated into terminal splits
+- Slash commands: /clear, /new, /cost, /help (local) + global ~/.claude/commands/
+- File attachments via clipboard paste, drag-drop, file picker
+- Model selector (Default, Opus 4.6, Sonnet 4.6, Haiku 4.5)
+- Permission modes: Default, Plan, Accept Edits, Bypass, Ask
+- Session persistence via localStorage
+- Cost tracking and streaming responses with tool use blocks
 
 ## Project Structure
 
@@ -55,17 +77,27 @@ devtools/
 ## Architecture Overview
 
 ### Frontend State Management (Zustand)
-- **AppStore** — Current view (terminal/git/editor), global UI state
+- **AppStore** — Current view (terminal/git/editor/browser/ssh), global UI state
 - **ProjectStore** — Open project tabs, active tab tracking
-- **PaneStore** — Terminal split pane tree per project
+- **PaneStore** — Terminal/Claude split pane tree per project, pane type (terminal|claude)
 - **GitStore** — Staged/unstaged files, selected file, commit state
 - **EditorStore** — Open file tabs, active file, dirty tracking, cursor position
+- **ClaudeStore** — Per-pane chat state: messages, streaming, session, cost, model, permissions, attachments
+- **BrowserStore** — Per-project browser URL, loading state, navigation capability
+- **SSHStore** — SSH connection, presets, SFTP file tree, terminal output
+- **SSHEditorStore** — Remote file editing state for SSH editor pane
 
 ### Backend (Rust/Tauri)
 - **file_ops.rs** — Read/write files with path validation
 - **git_ops.rs** — Execute git commands via CLI
 - **pty_manager.rs** — Create/manage PTY instances
 - **session_store.rs** — Load/save terminal sessions to ~/.devtools/sessions/
+- **ssh_manager.rs** — SSH connection lifecycle via russh
+- **sftp_ops.rs** — SFTP file operations (list, download, upload, delete)
+- **ssh_presets.rs** — Load/save SSH connection presets to ~/.devtools/ssh-presets.json
+- **claude_manager.rs** — Claude CLI subprocess with NDJSON streaming
+- **agent_server.rs** — WebSocket server (127.0.0.1:9876-9880) for Claude CLI agent integration
+- **browser_ops.rs** — Browser webview lifecycle (create, navigate, screenshot)
 
 ### IPC Commands
 - `read_file(path)` → file content
@@ -91,16 +123,22 @@ On startup, projects reload saved sessions from disk.
 | Global | Switch Terminal | `Ctrl+1` |
 | Global | Switch Git | `Ctrl+2` |
 | Global | Switch Editor | `Ctrl+3` |
+| Global | Switch Browser | `Ctrl+4` |
+| Global | Switch SSH | `Ctrl+5` |
 | Global | Next project tab | `Ctrl+Tab` |
 | Global | Prev project tab | `Ctrl+Shift+Tab` |
 | Terminal | Split horizontal | `Ctrl+Shift+H` |
 | Terminal | Split vertical | `Ctrl+Shift+V` |
+| Terminal | Split Claude pane | `Ctrl+Shift+C` |
+| Terminal | Toggle split direction | `Ctrl+Shift+T` |
 | Terminal | Close pane | `Ctrl+W` |
 | Editor | Save file | `Ctrl+S` |
 | Editor | Close file | `Ctrl+W` |
 | Git | Commit | `Ctrl+Enter` |
 | Git | Stage file | `S` (selected) |
 | Git | Unstage file | `U` (selected) |
+| SSH | Split horizontal | `Ctrl+Shift+H` |
+| SSH | Split vertical | `Ctrl+Shift+V` |
 
 ## Design System
 

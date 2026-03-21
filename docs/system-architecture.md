@@ -2,30 +2,24 @@
 
 ## High-Level Overview
 
-DevTools is a Tauri v2 desktop application with a React/TypeScript frontend and Rust backend. It provides four main views (Terminal, Git, Editor, SSH) for each open project, with per-project isolated state and session persistence.
+DevTools is a Tauri v2 desktop application with a React/TypeScript frontend and Rust backend. It provides six main views (Terminal, Git, Editor, Browser, SSH, Claude Chat) for each open project, with per-project isolated state and session persistence.
 
 ```
-┌─────────────────────────────────────────┐
-│         React Frontend (TypeScript)      │
-│  ┌──────────────────────────────────┐   │
-│  │ Views: Terminal|Git|Editor|SSH   │   │
-│  │ Sidebar Navigation (Ctrl+1/2/3/4/5)│  │
-│  └──────────────────────────────────┘   │
-│              Zustand Stores              │
-│  App | Project | Pane | Git | Editor|SSH│
-└────────────────────┬────────────────────┘
-                     │ IPC (Tauri)
-                     ↓
-┌─────────────────────────────────────────┐
-│   Rust Backend (Tauri v2 Commands)      │
-│  ┌──────────────────────────────────┐   │
-│  │ file_ops | git_ops | pty_mgr    │   │
-│  │ ssh_manager | sftp_ops | ssh_.. │   │
-│  │ session_store                    │   │
-│  └──────────────────────────────────┘   │
-│         OS Integration Layer             │
-│  File I/O | Git CLI | PTY | SSH | SFTP │
-└─────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│      React Frontend (TypeScript)             │
+│  Views: Terminal|Git|Editor|Browser|SSH|Chat │
+│  Sidebar (Ctrl+1/2/3/4/5)                    │
+│  Zustand: App|Project|Pane|Git|Editor|Claude│
+└────────────────┬─────────────────────────────┘
+                 │ IPC (Tauri) + WebSocket (Agent)
+                 ↓
+┌──────────────────────────────────────────────┐
+│  Rust Backend (Tauri v2 Commands)            │
+│  file_ops | git_ops | pty_mgr | ssh_mgr    │
+│  sftp_ops | claude_mgr | agent_server      │
+│         OS Integration Layer                 │
+│  File I/O | Git CLI | PTY | SSH | SFTP     │
+└──────────────────────────────────────────────┘
 ```
 
 ## Frontend Architecture
@@ -56,19 +50,28 @@ DevTools is a Tauri v2 desktop application with a React/TypeScript frontend and 
 - Per-project browser state (each tab has independent browser instance)
 - ResizeObserver for positioning native webview within React container
 
-#### SSH View (`ssh-panel.tsx`, `ssh-terminal.tsx`, `sftp-browser.tsx`)
+#### SSH View (`ssh-panel.tsx`, `ssh-terminal.tsx`, `sftp-browser.tsx`, `ssh-editor-pane.tsx`)
 - Split layout: left-side SFTP file tree, right-side SSH terminal (xterm.js)
 - SSH preset management (load/save/delete connection profiles)
 - SSH terminal with async command input/output via russh
 - SFTP file browser with drag-drop support, context menu for delete/download
+- SSH editor pane: edit remote files in Monaco (SFTP download → edit → save)
 - Per-project SSH connection state and SFTP tree cache
 - Terminal resizing synchronization with remote PTY
+
+#### Claude Chat Pane (`claude-chat-pane.tsx`, `claude-input.tsx`, `claude-message-list.tsx`)
+- Embedded AI chat in terminal pane splits (via Ctrl+Shift+C)
+- Slash commands (local: /clear, /new, /cost, /help; global: ~/.claude/commands/)
+- File attachments: clipboard (image/PDF), drag-drop, file picker
+- Model selector (Default, Opus 4.6, Sonnet 4.6, Haiku 4.5)
+- Permission modes (Default, Plan, Accept Edits, Bypass, Ask)
+- Streaming with tool use blocks, cost tracking, session persistence
 
 ### State Management (Zustand)
 
 #### AppStore
 ```typescript
-type AppView = "terminal" | "git" | "editor" | "ssh";
+type AppView = "terminal" | "git" | "editor" | "browser" | "ssh";
 interface: { view, setView }
 ```
 Global UI state only. Persisted to localStorage optionally.
@@ -85,17 +88,19 @@ interface: {
 ```
 Tracks which projects are open. Per-app state (not per-project).
 
-#### PaneStore (Terminal)
+#### PaneStore (Terminal + Claude)
 ```typescript
 interface: {
   panes: Record<projectPath, PaneNode>,  // Binary tree
   getActiveId,
   split,       // Create new pane
   closePane,
-  setActivePane
+  setActivePane,
+  toggleDirection  // Swap split orientation
 }
+type PaneNode = { id, type: "terminal"|"claude", layout, left/right }
 ```
-Each project has its own pane tree. PaneNode contains `{ id, layout, left/right }`.
+Each project has its own pane tree. Panes are leaf nodes (terminal or claude chat).
 
 #### GitStore
 ```typescript
@@ -155,17 +160,24 @@ interface: {
   connected: boolean,
   terminalOutput: string,
   sftpNodes: SFTPNode[],
-  connect,       // Connect to saved preset
-  disconnect,
-  writeInput,    // Send command to SSH terminal
-  resizeTerminal,
-  loadPresets,   // Load from ~/.devtools/ssh-presets.json
-  savePreset,
-  deletePreset,
-  listSFTPFiles
+  connect, disconnect, writeInput, resizeTerminal, loadPresets, savePreset, deletePreset
 }
 ```
 Manages SSH connections, presets, and SFTP file browser state per project.
+
+#### ClaudeStore
+```typescript
+interface: {
+  panes: Record<paneId, ClaudeState>,  // Per-pane chat state
+  messages: Message[],
+  streaming: boolean,
+  model, permissions, cost,
+  attachments: Attachment[],
+  sendMessage, cancelStream, setModel, setPermissions
+}
+type Message = { role, content, toolUse?: ToolBlock[] }
+```
+Manages Claude chat per pane. NDJSON backend streaming, slash command dispatch, localStorage persistence.
 
 ### Hooks
 
@@ -181,8 +193,8 @@ Creates xterm.js instance for SSH terminal and connects to SSH backend via IPC. 
 #### `use-session-persistence.ts`
 Loads/saves project sessions from `~/.devtools/sessions/` on mount/unmount.
 
-#### `use-ime-handler.ts`
-Handles IME (input method) composition events for non-Latin keyboards.
+#### `use-claude.ts` (new)
+Manages Claude chat stream via IPC: send_message, cancel, discover commands, check installation.
 
 ### Utils
 
@@ -279,61 +291,29 @@ pub fn load_session(project: &str) -> Result<PaneTree, String>
 
 Allows terminal panes to survive app restart.
 
-### ssh_manager.rs (SSH Connection)
+### ssh_manager.rs + sftp_ops.rs (SSH/SFTP)
 ```rust
-pub async fn connect(host: &str, port: u16, user: &str, auth: AuthMethod)
-  -> Result<SSHSession, String>
-  └─ Initiates SSH connection via russh
-  └─ Supports password and key-based auth
-  └─ Returns session handle for I/O
-
-pub async fn write_input(session: &mut SSHSession, cmd: &str) -> Result<(), String>
-  └─ Sends command to SSH terminal channel
-
-pub async fn read_output(session: &SSHSession) -> Result<String, String>
-  └─ Reads SSH channel output (preserves ANSI codes)
-
-pub async fn resize_terminal(session: &mut SSHSession, cols: u32, rows: u32)
-  -> Result<(), String>
-  └─ Requests PTY resize on remote
-
-pub async fn disconnect(session: SSHSession) -> Result<(), String>
-  └─ Closes SSH session gracefully
+async fn connect(host, port, user, auth) -> SSHSession  // via russh
+async fn write_input(session, cmd) -> ()                 // Send command
+async fn read_output(session) -> String                  // Read ANSI output
+async fn resize_terminal(session, cols, rows) -> ()      // PTY resize
+async fn list_dir(session, path) -> Vec<SFTPFile>       // SFTP list
+async fn download_file(session, remote, local) -> ()    // SFTP download
+async fn upload_file(session, local, remote) -> ()      // SFTP upload
+async fn delete_file(session, path) -> ()               // SFTP delete
 ```
+SSH via russh, SFTP via russh-sftp. Presets stored at ~/.devtools/ssh-presets.json.
 
-Uses `russh` async SSH client. Manages PTY allocation and channel I/O.
-
-### sftp_ops.rs (SFTP File Operations)
+### claude_manager.rs (Claude CLI Subprocess + agent_server.rs)
 ```rust
-pub async fn list_dir(session: &SFTPSession, path: &str)
-  -> Result<Vec<SFTPFile>, String>
-  └─ Lists directory contents with metadata
-  └─ Returns name, size, permissions, mtime
+async fn send_message(prompt, attachments, model) -> Stream<ClaudeEvent>  // NDJSON
+async fn discover_commands() -> Vec<Command>  // ~/.claude/commands/ + project
+fn save_temp_file(data, ext) -> String       // Store for attachment passing
 
-pub async fn download_file(session: &SFTPSession, remote: &str, local: &str)
-  -> Result<(), String>
-
-pub async fn upload_file(session: &SFTPSession, local: &str, remote: &str)
-  -> Result<(), String>
-
-pub async fn delete_file(session: &SFTPSession, path: &str) -> Result<(), String>
+// WebSocket agent server (127.0.0.1:9876-9880, token auth)
+// Ops: list_sessions, write(sessionId, input), subscribe, execute(sessionId, prompt)
 ```
-
-Uses `russh-sftp` for SFTP protocol. Integrates with SSH session from ssh_manager.
-
-### ssh_presets.rs (Connection Presets)
-```rust
-pub fn load_presets() -> Result<Vec<SSHPreset>, String>
-  └─ Loads presets from ~/.devtools/ssh-presets.json
-
-pub fn save_preset(preset: SSHPreset) -> Result<(), String>
-  └─ Appends/updates preset to file
-
-pub fn delete_preset(name: &str) -> Result<(), String>
-  └─ Removes preset by name
-```
-
-Persists connection details (host, port, user, auth method) for quick reconnect.
+Spawns Claude CLI with NDJSON streaming. Agent server enables Claude CLI to interact with live terminals/SSH via WS.
 
 ## Data Flow Examples
 
@@ -444,6 +424,35 @@ IPC → sftp_ops.rs async download_file()
 Transfers file via SFTP
   ↓
 Returns success to frontend
+```
+
+### Claude Chat Message Stream
+```
+User types message, attaches file (paste/drag), presses Enter
+  ↓
+ClaudeChatPane invokes ClaudeStore.sendMessage(msg, attachments, model, permissions)
+  ↓
+For each attachment: IPC → claude_save_temp_file() (→ ~/.devtools/tmp/)
+  ↓
+IPC → claude_send_message(prompt, temp_paths, model)
+  ↓
+claude_manager.rs spawns: claude [args] --stream --ndjson
+  ↓
+Streams: system.init { model, cost } | stream_event { type: content_block_delta/start/stop }
+  ↓
+Frontend yields to ClaudeStore: parsing NDJSON per event type
+  ↓
+ClaudeChatPane renders messages incrementally (streaming UI)
+  ↓
+On stream end: ClaudeStore.cost += response.cost, saves session to localStorage
+
+User types /command (e.g., /plan, /clear):
+  ↓
+Slash command dropdown detects match
+  ↓
+If local (/clear, /new, /cost): ClaudeStore handles directly
+  ↓
+If global (discovered): IPC → claude_discover_commands() → dispatch execution
 ```
 
 ## Project Isolation Model

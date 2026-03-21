@@ -24,6 +24,12 @@
   - `session_store.rs` — Session persistence logic
   - `clipboard_helper.rs` — Clipboard utilities
   - `browser_ops.rs` — Browser webview lifecycle management
+  - `ssh_manager.rs` — SSH connection management via russh
+  - `sftp_ops.rs` — SFTP file operations
+  - `ssh_presets.rs` — SSH preset persistence
+  - `claude_manager.rs` — Claude CLI subprocess, NDJSON streaming
+  - `agent_server.rs` — WebSocket server for agent protocol (127.0.0.1:9876-9880)
+  - `agent_protocol.rs` — Agent protocol message types
 
 ## Code Style
 
@@ -82,6 +88,24 @@ export const useStore = create<StoreState>((set, get) => ({
   })),
 }));
 ```
+
+### Claude Chat Component Pattern
+```typescript
+// Per-pane Claude state via ClaudeStore
+const ClaudeStore: Record<paneId, {
+  messages: Message[];
+  streaming: boolean;
+  sessionId: string;
+  cost: number;
+  model: "default" | "opus" | "sonnet" | "haiku";
+  permissions: PermissionMode;
+  attachments: Attachment[];
+}>
+```
+- Messages include assistant tool use blocks with language-specific rendering
+- Slash commands dispatch to backend or execute locally (/clear, /new, /cost, /help)
+- Attachments stored as {type, data, filename} — images/PDFs previewed
+- Streaming via NDJSON backend, cost calculated from response metadata
 
 ## State Management Guidelines
 
@@ -241,6 +265,11 @@ Fixes #123
 - Link to related issues
 - Request review from team
 - Address review comments in new commits
+
+## Removed Components
+
+- **use-ime-handler.ts** (deleted) — IME composition events no longer used
+- **ime_handler.rs** (deleted) — Rust IME handler removed
 
 ## Development Checklist
 

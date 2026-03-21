@@ -29,7 +29,13 @@
 
 ## State & Storage
 - **Zustand** — Lightweight state management
-- **JSON files** — Per-project session persistence (~/.devtools/sessions/)
+- **localStorage** — Claude chat session persistence
+- **JSON files** — Per-project session persistence (~/.devtools/sessions/, ~/.devtools/ssh-presets.json)
+
+## Claude AI Integration
+- **Claude Code CLI** — Subprocess invocation with NDJSON streaming
+- **@uiw/react-markdown-preview** — Markdown rendering with Mermaid support
+- **tokio-tungstenite** (Rust) — WebSocket for agent protocol
 
 ## Styling
 - **Tailwind CSS** — Utility-first styling
@@ -55,3 +61,5 @@
 | Diff renderer | diff2html | Lightweight, syntax highlighting, multiple view modes |
 | State mgmt | Zustand | Minimal boilerplate |
 | Bundler | Vite | Fast HMR, Tauri-native integration |
+| Claude integration | CLI subprocess + NDJSON | Leverage Claude CLI, streaming responses, slash commands |
+| Agent protocol | WebSocket (127.0.0.1:9876-9880) | Enable Claude CLI to interact with live SSH, token auth |
