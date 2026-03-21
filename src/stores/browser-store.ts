@@ -29,12 +29,8 @@ export interface BrowserState {
   annotationTool: AnnotationTool;
   annotationColor: string;
   annotationStrokeWidth: number;
-  // Float layout
-  layoutMode: "docked" | "float";
-  floatX: number;
-  floatY: number;
-  floatWidth: number;
-  floatHeight: number;
+  // Layout mode: docked in pane tree, pinned stays visible across view switches
+  layoutMode: "docked" | "pinned";
 }
 
 const DEFAULT_STATE: BrowserState = {
@@ -53,123 +49,126 @@ const DEFAULT_STATE: BrowserState = {
   annotationColor: "#f38ba8",
   annotationStrokeWidth: 3,
   layoutMode: "docked",
-  floatX: 100,
-  floatY: 100,
-  floatWidth: 480,
-  floatHeight: 360,
 };
 
 interface BrowserStore {
   states: Record<string, BrowserState>;
-  getState: (projectPath: string) => BrowserState;
-  setUrl: (projectPath: string, url: string) => void;
-  setLoading: (projectPath: string, isLoading: boolean) => void;
-  setNavState: (projectPath: string, canGoBack: boolean, canGoForward: boolean) => void;
-  setTitle: (projectPath: string, title: string) => void;
-  markWebviewCreated: (projectPath: string) => void;
-  addLog: (projectPath: string, log: ConsoleLog) => void;
-  clearLogs: (projectPath: string) => void;
-  setConsoleFilter: (projectPath: string, filter: ConsoleFilter) => void;
-  toggleConsolePanel: (projectPath: string) => void;
-  openAnnotation: (projectPath: string, screenshotData: string) => void;
-  closeAnnotation: (projectPath: string) => void;
-  setAnnotationTool: (projectPath: string, tool: AnnotationTool) => void;
-  setAnnotationColor: (projectPath: string, color: string) => void;
-  setAnnotationStrokeWidth: (projectPath: string, width: number) => void;
-  toggleLayoutMode: (projectPath: string) => void;
-  setFloatPosition: (projectPath: string, x: number, y: number) => void;
-  setFloatSize: (projectPath: string, width: number, height: number) => void;
-  removeProject: (projectPath: string) => void;
+  getState: (paneId: string) => BrowserState;
+  setUrl: (paneId: string, url: string) => void;
+  setLoading: (paneId: string, isLoading: boolean) => void;
+  setNavState: (paneId: string, canGoBack: boolean, canGoForward: boolean) => void;
+  setTitle: (paneId: string, title: string) => void;
+  markWebviewCreated: (paneId: string) => void;
+  addLog: (paneId: string, log: ConsoleLog) => void;
+  clearLogs: (paneId: string) => void;
+  setConsoleFilter: (paneId: string, filter: ConsoleFilter) => void;
+  toggleConsolePanel: (paneId: string) => void;
+  openAnnotation: (paneId: string, screenshotData: string) => void;
+  closeAnnotation: (paneId: string) => void;
+  setAnnotationTool: (paneId: string, tool: AnnotationTool) => void;
+  setAnnotationColor: (paneId: string, color: string) => void;
+  setAnnotationStrokeWidth: (paneId: string, width: number) => void;
+  togglePinMode: (paneId: string) => void;
+  /** Remove state for a single browser pane and destroy its webview */
+  removePaneState: (paneId: string) => void;
+  /** Remove all browser pane states for a project (on tab close) */
+  removePanesForProject: (paneIds: string[]) => void;
 }
 
-/** Helper to update a single project's state */
+/** Helper to update a single pane's state */
 function updateState(
   states: Record<string, BrowserState>,
-  projectPath: string,
+  paneId: string,
   patch: Partial<BrowserState>,
 ): Record<string, BrowserState> {
   return {
     ...states,
-    [projectPath]: { ...(states[projectPath] ?? DEFAULT_STATE), ...patch },
+    [paneId]: { ...(states[paneId] ?? DEFAULT_STATE), ...patch },
   };
 }
 
 export const useBrowserStore = create<BrowserStore>((set, get) => ({
   states: {},
 
-  getState: (projectPath) => get().states[projectPath] ?? DEFAULT_STATE,
+  getState: (paneId) => get().states[paneId] ?? DEFAULT_STATE,
 
-  setUrl: (projectPath, url) =>
-    set((s) => ({ states: updateState(s.states, projectPath, { url }) })),
+  setUrl: (paneId, url) =>
+    set((s) => ({ states: updateState(s.states, paneId, { url }) })),
 
-  setLoading: (projectPath, isLoading) =>
-    set((s) => ({ states: updateState(s.states, projectPath, { isLoading }) })),
+  setLoading: (paneId, isLoading) =>
+    set((s) => ({ states: updateState(s.states, paneId, { isLoading }) })),
 
-  setNavState: (projectPath, canGoBack, canGoForward) =>
-    set((s) => ({ states: updateState(s.states, projectPath, { canGoBack, canGoForward }) })),
+  setNavState: (paneId, canGoBack, canGoForward) =>
+    set((s) => ({ states: updateState(s.states, paneId, { canGoBack, canGoForward }) })),
 
-  setTitle: (projectPath, title) =>
-    set((s) => ({ states: updateState(s.states, projectPath, { title }) })),
+  setTitle: (paneId, title) =>
+    set((s) => ({ states: updateState(s.states, paneId, { title }) })),
 
-  markWebviewCreated: (projectPath) =>
-    set((s) => ({ states: updateState(s.states, projectPath, { webviewCreated: true }) })),
+  markWebviewCreated: (paneId) =>
+    set((s) => ({ states: updateState(s.states, paneId, { webviewCreated: true }) })),
 
-  addLog: (projectPath, log) =>
+  addLog: (paneId, log) =>
     set((s) => {
-      const current = s.states[projectPath] ?? DEFAULT_STATE;
-      // FIFO eviction at MAX_CONSOLE_LOGS
+      const current = s.states[paneId] ?? DEFAULT_STATE;
       const logs = current.consoleLogs.length >= MAX_CONSOLE_LOGS
         ? [...current.consoleLogs.slice(1), log]
         : [...current.consoleLogs, log];
-      return { states: updateState(s.states, projectPath, { consoleLogs: logs }) };
+      return { states: updateState(s.states, paneId, { consoleLogs: logs }) };
     }),
 
-  clearLogs: (projectPath) =>
-    set((s) => ({ states: updateState(s.states, projectPath, { consoleLogs: [] }) })),
+  clearLogs: (paneId) =>
+    set((s) => ({ states: updateState(s.states, paneId, { consoleLogs: [] }) })),
 
-  setConsoleFilter: (projectPath, filter) =>
-    set((s) => ({ states: updateState(s.states, projectPath, { consoleFilter: filter }) })),
+  setConsoleFilter: (paneId, filter) =>
+    set((s) => ({ states: updateState(s.states, paneId, { consoleFilter: filter }) })),
 
-  toggleConsolePanel: (projectPath) =>
+  toggleConsolePanel: (paneId) =>
     set((s) => {
-      const current = s.states[projectPath] ?? DEFAULT_STATE;
-      return { states: updateState(s.states, projectPath, { consolePanelOpen: !current.consolePanelOpen }) };
+      const current = s.states[paneId] ?? DEFAULT_STATE;
+      return { states: updateState(s.states, paneId, { consolePanelOpen: !current.consolePanelOpen }) };
     }),
 
-  openAnnotation: (projectPath, screenshotData) =>
-    set((s) => ({ states: updateState(s.states, projectPath, { annotationOpen: true, screenshotData }) })),
+  openAnnotation: (paneId, screenshotData) =>
+    set((s) => ({ states: updateState(s.states, paneId, { annotationOpen: true, screenshotData }) })),
 
-  closeAnnotation: (projectPath) =>
-    set((s) => ({ states: updateState(s.states, projectPath, { annotationOpen: false, screenshotData: null }) })),
+  closeAnnotation: (paneId) =>
+    set((s) => ({ states: updateState(s.states, paneId, { annotationOpen: false, screenshotData: null }) })),
 
-  setAnnotationTool: (projectPath, tool) =>
-    set((s) => ({ states: updateState(s.states, projectPath, { annotationTool: tool }) })),
+  setAnnotationTool: (paneId, tool) =>
+    set((s) => ({ states: updateState(s.states, paneId, { annotationTool: tool }) })),
 
-  setAnnotationColor: (projectPath, color) =>
-    set((s) => ({ states: updateState(s.states, projectPath, { annotationColor: color }) })),
+  setAnnotationColor: (paneId, color) =>
+    set((s) => ({ states: updateState(s.states, paneId, { annotationColor: color }) })),
 
-  setAnnotationStrokeWidth: (projectPath, width) =>
-    set((s) => ({ states: updateState(s.states, projectPath, { annotationStrokeWidth: width }) })),
+  setAnnotationStrokeWidth: (paneId, width) =>
+    set((s) => ({ states: updateState(s.states, paneId, { annotationStrokeWidth: width }) })),
 
-  toggleLayoutMode: (projectPath) =>
+  togglePinMode: (paneId) =>
     set((s) => {
-      const current = s.states[projectPath] ?? DEFAULT_STATE;
-      return { states: updateState(s.states, projectPath, {
-        layoutMode: current.layoutMode === "docked" ? "float" : "docked",
+      const current = s.states[paneId] ?? DEFAULT_STATE;
+      return { states: updateState(s.states, paneId, {
+        layoutMode: current.layoutMode === "pinned" ? "docked" : "pinned",
       }) };
     }),
 
-  setFloatPosition: (projectPath, x, y) =>
-    set((s) => ({ states: updateState(s.states, projectPath, { floatX: x, floatY: y }) })),
-
-  setFloatSize: (projectPath, width, height) =>
-    set((s) => ({ states: updateState(s.states, projectPath, { floatWidth: width, floatHeight: height }) })),
-
-  removeProject: (projectPath) => {
-    invoke("destroy_browser_webview", { projectId: projectPath }).catch(() => {});
+  removePaneState: (paneId) => {
+    invoke("destroy_browser_webview", { paneId }).catch(() => {});
     set((s) => {
-      const { [projectPath]: _, ...rest } = s.states;
+      const { [paneId]: _, ...rest } = s.states;
       return { states: rest };
+    });
+  },
+
+  removePanesForProject: (paneIds) => {
+    for (const paneId of paneIds) {
+      invoke("destroy_browser_webview", { paneId }).catch(() => {});
+    }
+    set((s) => {
+      const next = { ...s.states };
+      for (const paneId of paneIds) {
+        delete next[paneId];
+      }
+      return { states: next };
     });
   },
 }));

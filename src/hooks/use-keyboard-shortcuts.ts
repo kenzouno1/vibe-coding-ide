@@ -7,6 +7,7 @@ import { useEditorStore } from "@/stores/editor-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useSshStore } from "@/stores/ssh-store";
 import { useClaudeStore } from "@/stores/claude-store";
+import { useBrowserStore } from "@/stores/browser-store";
 
 /**
  * Global keyboard shortcut handler.
@@ -56,37 +57,40 @@ export function useKeyboardShortcuts() {
       }
       if (isCtrl && e.key === "4") {
         e.preventDefault();
-        setView("browser");
-        return;
-      }
-      if (isCtrl && e.key === "5") {
-        e.preventDefault();
         setView("ssh");
         return;
       }
 
-      // F5: refresh browser panel (not the app). Ctrl+F5: refresh the app.
+      // F5: refresh browser pane (not the app). Ctrl+F5: refresh the app.
       if (e.key === "F5") {
         e.preventDefault();
         if (isCtrl) {
           window.location.reload();
           return;
         }
-        if (view === "browser") {
-          import("@tauri-apps/api/core").then(({ invoke }) => {
-            invoke("browser_reload", { projectId: project });
-          });
+        if (view === "terminal") {
+          const activeId = getActiveId(project);
+          const paneType = usePaneStore.getState().getPaneType(project, activeId);
+          if (paneType === "browser") {
+            import("@tauri-apps/api/core").then(({ invoke }) => {
+              invoke("browser_reload", { paneId: activeId });
+            });
+          }
         }
         return;
       }
 
-      // Browser DevTools toggle (F12 in browser view)
-      if (view === "browser" && e.key === "F12") {
-        e.preventDefault();
-        import("@tauri-apps/api/core").then(({ invoke }) => {
-          invoke("open_browser_devtools", { projectId: project });
-        });
-        return;
+      // Browser DevTools toggle (F12 when browser pane is focused)
+      if (view === "terminal" && e.key === "F12") {
+        const activeId = getActiveId(project);
+        const paneType = usePaneStore.getState().getPaneType(project, activeId);
+        if (paneType === "browser") {
+          e.preventDefault();
+          import("@tauri-apps/api/core").then(({ invoke }) => {
+            invoke("open_browser_devtools", { paneId: activeId });
+          });
+          return;
+        }
       }
 
       // Tab switching: Ctrl+Tab / Ctrl+Shift+Tab
@@ -123,6 +127,14 @@ export function useKeyboardShortcuts() {
           split(project, activeId, dir, "claude");
           return;
         }
+        // Ctrl+Shift+B: Split with browser pane (auto direction)
+        if (isCtrl && e.shiftKey && e.key === "B") {
+          e.preventDefault();
+          const rect = getPaneRect(activeId);
+          const dir = rect ? autoDirection(rect.width, rect.height) : "horizontal";
+          split(project, activeId, dir, "browser");
+          return;
+        }
         // Ctrl+Shift+T: Toggle split direction (H↔V)
         if (isCtrl && e.shiftKey && e.key === "T") {
           e.preventDefault();
@@ -131,10 +143,14 @@ export function useKeyboardShortcuts() {
         }
         if (isCtrl && e.key === "w") {
           e.preventDefault();
-          // Clean up Claude state if closing a Claude pane
           const paneType = usePaneStore.getState().getPaneType(project, activeId);
           if (paneType === "claude") {
             useClaudeStore.getState().removePaneState(activeId);
+          }
+          if (paneType === "browser") {
+            // Only remove store state — webview destroy handled by BrowserPane unmount
+            const { [activeId]: _, ...rest } = useBrowserStore.getState().states;
+            useBrowserStore.setState({ states: rest });
           }
           closePane(project, activeId);
           return;

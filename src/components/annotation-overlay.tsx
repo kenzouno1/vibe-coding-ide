@@ -18,13 +18,15 @@ interface ShapeData {
 }
 
 interface AnnotationOverlayProps {
+  paneId: string;
   projectPath: string;
 }
 
 export const AnnotationOverlay = memo(function AnnotationOverlay({
+  paneId,
   projectPath,
 }: AnnotationOverlayProps) {
-  const browserState = useBrowserStore((s) => s.getState(projectPath));
+  const browserState = useBrowserStore((s) => s.getState(paneId));
   const closeAnnotation = useBrowserStore((s) => s.closeAnnotation);
 
   const stageRef = useRef<any>(null);
@@ -96,7 +98,7 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
     const handler = (e: KeyboardEvent) => {
       if (textInput) return; // don't handle while typing
       if (e.key === "Escape") {
-        closeAnnotation(projectPath);
+        closeAnnotation(paneId);
         return;
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
@@ -146,7 +148,7 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
       window.removeEventListener("keydown", handler);
       window.removeEventListener("paste", handlePaste);
     };
-  }, [undo, redo, closeAnnotation, projectPath, textInput]);
+  }, [undo, redo, closeAnnotation, paneId, textInput]);
 
   // Commit text input
   const commitTextInput = useCallback(() => {
@@ -349,12 +351,12 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-ctp-crust">
       <AnnotationToolbar
-        projectPath={projectPath}
+        paneId={paneId}
         onUndo={undo}
         onRedo={redo}
         onSave={handleSave}
         onCopy={handleCopy}
-        onClose={() => closeAnnotation(projectPath)}
+        onClose={() => closeAnnotation(paneId)}
         canUndo={historyIndex > 0}
         canRedo={historyIndex < history.length - 1}
       />

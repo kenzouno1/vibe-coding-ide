@@ -110,11 +110,14 @@ const ClaudeStore: Record<paneId, {
 ## State Management Guidelines
 
 ### Store Responsibilities
-- **AppStore** — Global UI state only (current view)
+- **AppStore** — Global UI state only (current view: terminal/git/editor/ssh)
 - **ProjectStore** — Open project tabs, active tab
-- **PaneStore** — Terminal pane tree per project
+- **PaneStore** — Pane tree per project (terminal, claude, browser pane types)
 - **GitStore** — Git file state (staged/unstaged) per project
 - **EditorStore** — Open file tabs, content, cursor per project
+- **BrowserStore** — Per-pane browser state (URL, loading, navigation)
+- **ClaudeStore** — Per-pane chat state (messages, streaming, session)
+- **SSHStore** — SSH connection state per project
 
 ### Per-Project State
 Most stores use `Record<projectPath, State>` pattern:

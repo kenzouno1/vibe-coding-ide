@@ -1,11 +1,10 @@
-import { Terminal, GitBranch, Code, Globe, Monitor } from "lucide-react";
+import { Terminal, GitBranch, Code, Monitor } from "lucide-react";
 import { useAppStore, type AppView } from "@/stores/app-store";
 
 const NAV_ITEMS: { view: AppView; icon: typeof Terminal; label: string }[] = [
   { view: "terminal", icon: Terminal, label: "Terminal" },
   { view: "git", icon: GitBranch, label: "Git" },
   { view: "editor", icon: Code, label: "Editor" },
-  { view: "browser", icon: Globe, label: "Browser" },
   { view: "ssh", icon: Monitor, label: "SSH" },
 ];
 

@@ -11,11 +11,11 @@ DevTools strips away the bloat and keeps only what matters:
 - **Terminal** — Split panes, multi-project tabs, built-in PTY. Just code.
 - **Git** — Stage, diff, commit. No menus, no wizards.
 - **Editor** — Monaco-powered, multi-tab file editing when you need to make a quick fix.
-- **Browser** — Embedded browser to preview your app without alt-tabbing.
+- **Browser** — Embedded browser pane to preview your app alongside your terminal (Ctrl+Shift+B). Pin it to stay visible across views.
 - **SSH** — Remote terminal & SFTP browser for server workflows.
 - **Claude Chat** — Embedded Claude AI with slash commands, file attachments, model selection.
 
-That's it. Six views. One sidebar. Zero distractions.
+Four sidebar views. Split panes for browser and AI. Zero distractions.
 
 ## Why?
 

@@ -1,16 +1,16 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { ArrowLeft, ArrowRight, RotateCw, Loader2, Camera, PanelTop, Maximize2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, RotateCw, Loader2, Camera, Pin } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useBrowserStore } from "@/stores/browser-store";
 
 interface BrowserUrlBarProps {
-  projectPath: string;
+  paneId: string;
 }
 
-export function BrowserUrlBar({ projectPath }: BrowserUrlBarProps) {
-  const browserState = useBrowserStore((s) => s.getState(projectPath));
+export function BrowserUrlBar({ paneId }: BrowserUrlBarProps) {
+  const browserState = useBrowserStore((s) => s.getState(paneId));
   const setUrl = useBrowserStore((s) => s.setUrl);
-  const toggleLayoutMode = useBrowserStore((s) => s.toggleLayoutMode);
+  const togglePinMode = useBrowserStore((s) => s.togglePinMode);
   const [inputValue, setInputValue] = useState(browserState.url);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -37,17 +37,17 @@ export function BrowserUrlBar({ projectPath }: BrowserUrlBarProps) {
       if (!normalizedUrl) return;
 
       try {
-        setUrl(projectPath, normalizedUrl);
+        setUrl(paneId, normalizedUrl);
         setInputValue(normalizedUrl);
         await invoke("navigate_browser", {
-          projectId: projectPath,
+          paneId,
           url: normalizedUrl,
         });
       } catch (err) {
         console.error("Navigation failed:", err);
       }
     },
-    [projectPath, setUrl],
+    [paneId, setUrl],
   );
 
   const handleKeyDown = useCallback(
@@ -62,36 +62,36 @@ export function BrowserUrlBar({ projectPath }: BrowserUrlBarProps) {
 
   const goBack = useCallback(async () => {
     try {
-      await invoke("browser_go_back", { projectId: projectPath });
+      await invoke("browser_go_back", { paneId });
     } catch (err) {
       console.error("Go back failed:", err);
     }
-  }, [projectPath]);
+  }, [paneId]);
 
   const goForward = useCallback(async () => {
     try {
-      await invoke("browser_go_forward", { projectId: projectPath });
+      await invoke("browser_go_forward", { paneId });
     } catch (err) {
       console.error("Go forward failed:", err);
     }
-  }, [projectPath]);
+  }, [paneId]);
 
   const reload = useCallback(async () => {
     try {
-      await invoke("browser_reload", { projectId: projectPath });
+      await invoke("browser_reload", { paneId });
     } catch (err) {
       console.error("Reload failed:", err);
     }
-  }, [projectPath]);
+  }, [paneId]);
 
   const openAnnotation = useBrowserStore((s) => s.openAnnotation);
 
   const captureScreenshot = useCallback(() => {
     // Open annotation canvas immediately (blank or with screenshot if capture succeeds)
-    openAnnotation(projectPath, "");
+    openAnnotation(paneId, "");
     // Try async capture — if successful, browser-screenshot-captured event updates background
-    invoke("capture_browser_screenshot", { projectId: projectPath }).catch(() => {});
-  }, [projectPath, openAnnotation]);
+    invoke("capture_browser_screenshot", { paneId }).catch(() => {});
+  }, [paneId, openAnnotation]);
 
   return (
     <div className="flex items-center gap-1 px-2 py-1.5 bg-ctp-mantle border-b border-ctp-surface0">
@@ -144,13 +144,15 @@ export function BrowserUrlBar({ projectPath }: BrowserUrlBarProps) {
         <Camera size={16} />
       </button>
 
-      {/* Float/dock toggle */}
+      {/* Pin toggle — keep visible across views */}
       <button
-        onClick={() => toggleLayoutMode(projectPath)}
-        title={browserState.layoutMode === "docked" ? "Float browser" : "Dock browser"}
-        className="p-1.5 rounded hover:bg-ctp-surface0 text-ctp-overlay1 hover:text-ctp-text transition-colors"
+        onClick={() => togglePinMode(paneId)}
+        title={browserState.layoutMode === "pinned" ? "Unpin browser" : "Pin browser (stay visible)"}
+        className={`p-1.5 rounded hover:bg-ctp-surface0 transition-colors ${
+          browserState.layoutMode === "pinned" ? "text-ctp-mauve" : "text-ctp-overlay1 hover:text-ctp-text"
+        }`}
       >
-        {browserState.layoutMode === "docked" ? <Maximize2 size={16} /> : <PanelTop size={16} />}
+        <Pin size={16} />
       </button>
 
       {/* Page title (truncated) */}

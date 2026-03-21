@@ -6,6 +6,8 @@ import type { PaneNode } from "@/stores/pane-store";
 import { SplitHandle } from "@/components/split-handle";
 import { TerminalPane } from "@/components/terminal-pane";
 import { ClaudeChatPane } from "@/components/claude-chat-pane";
+import { BrowserPane } from "@/components/browser-pane";
+import type { PaneType } from "@/stores/pane-store";
 
 /**
  * Leaf slot — mounts a stable container element into the layout.
@@ -65,6 +67,14 @@ function TreeLayout({
   );
 }
 
+function getPaneComponent(paneType: PaneType) {
+  switch (paneType) {
+    case "claude": return ClaudeChatPane;
+    case "browser": return BrowserPane;
+    default: return TerminalPane;
+  }
+}
+
 interface SplitPaneContainerProps {
   projectPath: string;
 }
@@ -114,7 +124,7 @@ export function SplitPaneContainer({ projectPath }: SplitPaneContainerProps) {
       {leafIds.map((id) => {
         const container = containersRef.current.get(id)!;
         const paneType = getPaneType(projectPath, id);
-        const PaneComponent = paneType === "claude" ? ClaudeChatPane : TerminalPane;
+        const PaneComponent = getPaneComponent(paneType);
         return createPortal(
           <PaneComponent
             key={id}

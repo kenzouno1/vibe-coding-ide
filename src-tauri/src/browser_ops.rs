@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use tauri::webview::{PageLoadEvent, WebviewBuilder};
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, Rect, WebviewUrl};
 
-/// Generate a stable short label from project path (Tauri requires unique labels)
-fn webview_label(project_id: &str) -> String {
+/// Generate a stable short label from pane ID (Tauri requires unique labels)
+fn webview_label(pane_id: &str) -> String {
     let mut hasher = DefaultHasher::new();
-    project_id.hash(&mut hasher);
+    pane_id.hash(&mut hasher);
     format!("browser-{:x}", hasher.finish())
 }
 
@@ -205,14 +205,14 @@ pub async fn forward_browser_selection(
 #[tauri::command]
 pub async fn create_browser_webview(
     app: tauri::AppHandle,
-    project_id: String,
+    pane_id: String,
     url: String,
     x: f64,
     y: f64,
     width: f64,
     height: f64,
 ) -> Result<(), String> {
-    let label = webview_label(&project_id);
+    let label = webview_label(&pane_id);
 
     // Check if already exists
     if app.get_webview(&label).is_some() {
@@ -231,6 +231,9 @@ pub async fn create_browser_webview(
     let label_for_nav = label.clone();
     let label_for_load = label.clone();
     let label_for_title = label.clone();
+    let pane_id_for_nav = pane_id.clone();
+    let pane_id_for_load = pane_id.clone();
+    let pane_id_for_title = pane_id.clone();
 
     let builder = WebviewBuilder::new(&label, parsed_url)
         .initialization_script(CONSOLE_BRIDGE_SCRIPT)
@@ -245,6 +248,7 @@ pub async fn create_browser_webview(
                 "browser-navigated",
                 serde_json::json!({
                     "label": label_for_nav,
+                    "paneId": pane_id_for_nav,
                     "url": url_str,
                 }),
             );
@@ -255,18 +259,17 @@ pub async fn create_browser_webview(
                 PageLoadEvent::Started => ("started", payload.url().to_string()),
                 PageLoadEvent::Finished => ("finished", payload.url().to_string()),
             };
-            // Emit to app (main webview) not child webview, so React can listen
             let _ = app_for_load.emit(
                 "browser-page-load",
                 serde_json::json!({
                     "label": label_for_load,
+                    "paneId": pane_id_for_load,
                     "event": event_name,
                     "url": url,
                 }),
             );
         })
         .on_document_title_changed(move |_webview, title| {
-            // Debug: log all title changes
             log::info!("[browser] title changed: {}", &title[..title.len().min(100)]);
 
             // Intercept "Send to AI Terminal" from context menu
@@ -276,6 +279,7 @@ pub async fn create_browser_webview(
                     "browser-selection",
                     serde_json::json!({
                         "label": label_for_title,
+                        "paneId": pane_id_for_title,
                         "text": text,
                         "url": "",
                     }),
@@ -283,10 +287,8 @@ pub async fn create_browser_webview(
                 return;
             }
 
-            // Intercept console log flush signal from polling thread
-            // Format: __DEVTOOLS_FLUSH_{counter}__[json array]
+            // Intercept console log flush signal
             if title.starts_with("__DEVTOOLS_FLUSH_") {
-                // Find the JSON array start — first '[' character
                 let json_data = match title.find('[') {
                     Some(pos) => &title[pos..],
                     None => return,
@@ -297,6 +299,7 @@ pub async fn create_browser_webview(
                             "browser-console",
                             serde_json::json!({
                                 "label": label_for_title,
+                                "paneId": pane_id_for_title,
                                 "level": log.get("level").and_then(|v| v.as_str()).unwrap_or("log"),
                                 "message": log.get("message").and_then(|v| v.as_str()).unwrap_or(""),
                                 "timestamp": log.get("timestamp").and_then(|v| v.as_f64()).unwrap_or(0.0),
@@ -311,6 +314,7 @@ pub async fn create_browser_webview(
                 "browser-title-changed",
                 serde_json::json!({
                     "label": label_for_title,
+                    "paneId": pane_id_for_title,
                     "title": title,
                 }),
             );
@@ -334,10 +338,10 @@ pub async fn create_browser_webview(
 #[tauri::command]
 pub async fn flush_browser_logs(
     app: tauri::AppHandle,
-    project_id: String,
+    pane_id: String,
     counter: u64,
 ) -> Result<(), String> {
-    let label = webview_label(&project_id);
+    let label = webview_label(&pane_id);
     let webview = match app.get_webview(&label) {
         Some(w) => w,
         None => return Ok(()), // webview not created yet
@@ -395,10 +399,10 @@ pub async fn forward_console_log(
 #[tauri::command]
 pub async fn navigate_browser(
     app: tauri::AppHandle,
-    project_id: String,
+    pane_id: String,
     url: String,
 ) -> Result<(), String> {
-    let label = webview_label(&project_id);
+    let label = webview_label(&pane_id);
     let webview = get_child_webview(&app, &label)?;
     let parsed: tauri::Url = url.parse().map_err(|e| format!("Invalid URL: {e}"))?;
     webview.navigate(parsed).map_err(|e| e.to_string())
@@ -408,9 +412,9 @@ pub async fn navigate_browser(
 #[tauri::command]
 pub async fn browser_go_back(
     app: tauri::AppHandle,
-    project_id: String,
+    pane_id: String,
 ) -> Result<(), String> {
-    let label = webview_label(&project_id);
+    let label = webview_label(&pane_id);
     let webview = get_child_webview(&app, &label)?;
     webview
         .eval("window.history.back()")
@@ -421,9 +425,9 @@ pub async fn browser_go_back(
 #[tauri::command]
 pub async fn browser_go_forward(
     app: tauri::AppHandle,
-    project_id: String,
+    pane_id: String,
 ) -> Result<(), String> {
-    let label = webview_label(&project_id);
+    let label = webview_label(&pane_id);
     let webview = get_child_webview(&app, &label)?;
     webview
         .eval("window.history.forward()")
@@ -434,9 +438,9 @@ pub async fn browser_go_forward(
 #[tauri::command]
 pub async fn browser_reload(
     app: tauri::AppHandle,
-    project_id: String,
+    pane_id: String,
 ) -> Result<(), String> {
-    let label = webview_label(&project_id);
+    let label = webview_label(&pane_id);
     let webview = get_child_webview(&app, &label)?;
     webview
         .eval("window.location.reload()")
@@ -447,13 +451,13 @@ pub async fn browser_reload(
 #[tauri::command]
 pub async fn resize_browser_webview(
     app: tauri::AppHandle,
-    project_id: String,
+    pane_id: String,
     x: f64,
     y: f64,
     width: f64,
     height: f64,
 ) -> Result<(), String> {
-    let label = webview_label(&project_id);
+    let label = webview_label(&pane_id);
     let webview = get_child_webview(&app, &label)?;
     webview
         .set_bounds(Rect {
@@ -467,9 +471,9 @@ pub async fn resize_browser_webview(
 #[tauri::command]
 pub async fn show_browser_webview(
     app: tauri::AppHandle,
-    project_id: String,
+    pane_id: String,
 ) -> Result<(), String> {
-    let label = webview_label(&project_id);
+    let label = webview_label(&pane_id);
     let webview = get_child_webview(&app, &label)?;
     webview.show().map_err(|e| e.to_string())
 }
@@ -478,9 +482,9 @@ pub async fn show_browser_webview(
 #[tauri::command]
 pub async fn hide_browser_webview(
     app: tauri::AppHandle,
-    project_id: String,
+    pane_id: String,
 ) -> Result<(), String> {
-    let label = webview_label(&project_id);
+    let label = webview_label(&pane_id);
     if let Some(webview) = app.get_webview(&label) {
         webview.hide().map_err(|e| e.to_string())?;
     }
@@ -491,9 +495,9 @@ pub async fn hide_browser_webview(
 #[tauri::command]
 pub async fn destroy_browser_webview(
     app: tauri::AppHandle,
-    project_id: String,
+    pane_id: String,
 ) -> Result<(), String> {
-    let label = webview_label(&project_id);
+    let label = webview_label(&pane_id);
     if let Some(webview) = app.get_webview(&label) {
         webview.close().map_err(|e| e.to_string())?;
     }
@@ -505,9 +509,9 @@ pub async fn destroy_browser_webview(
 #[tauri::command]
 pub async fn capture_browser_screenshot(
     app: tauri::AppHandle,
-    project_id: String,
+    pane_id: String,
 ) -> Result<(), String> {
-    let label = webview_label(&project_id);
+    let label = webview_label(&pane_id);
     let webview = get_child_webview(&app, &label)?;
 
     // Inject a script that captures the visible viewport as a PNG data URL.
@@ -639,9 +643,9 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
 #[tauri::command]
 pub async fn open_browser_devtools(
     app: tauri::AppHandle,
-    project_id: String,
+    pane_id: String,
 ) -> Result<(), String> {
-    let label = webview_label(&project_id);
+    let label = webview_label(&pane_id);
     let webview = get_child_webview(&app, &label)?;
     #[cfg(debug_assertions)]
     webview.open_devtools();

@@ -2,8 +2,6 @@ import { useEffect } from "react";
 import { SplitPaneContainer } from "@/components/split-pane-container";
 import { GitPanel } from "@/components/git-panel";
 import { EditorView } from "@/components/editor-view";
-import { BrowserView } from "@/components/browser-view";
-import { FloatingPanel } from "@/components/floating-panel";
 import { SshPanel } from "@/components/ssh-panel";
 import { Sidebar } from "@/components/sidebar";
 import { StatusBar } from "@/components/status-bar";
@@ -12,7 +10,6 @@ import { TitleBar } from "@/components/title-bar";
 import { useAppStore } from "@/stores/app-store";
 import { useGitStore } from "@/stores/git-store";
 import { useProjectStore } from "@/stores/project-store";
-import { useBrowserStore } from "@/stores/browser-store";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useSessionPersistence } from "@/hooks/use-session-persistence";
 
@@ -84,16 +81,6 @@ export function App() {
                 >
                   <EditorView projectPath={tab.path} />
                 </div>
-                {/* Browser view */}
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    visibility: view === "browser" ? "visible" : "hidden",
-                    zIndex: view === "browser" ? 1 : 0,
-                  }}
-                >
-                  <BrowserView projectPath={tab.path} />
-                </div>
               </div>
             );
           })}
@@ -108,27 +95,6 @@ export function App() {
             <SshPanel />
           </div>
         </div>
-        {/* Floating browser panels — rendered above all views */}
-        {openTabs.map((tab) => {
-          const bs = useBrowserStore.getState().getState(tab.path);
-          if (bs.layoutMode !== "float" || !bs.webviewCreated) return null;
-          return (
-            <FloatingPanel
-              key={`float-${tab.path}`}
-              x={bs.floatX}
-              y={bs.floatY}
-              width={bs.floatWidth}
-              height={bs.floatHeight}
-              title={bs.title || bs.url}
-              onMove={(x, y) => useBrowserStore.getState().setFloatPosition(tab.path, x, y)}
-              onResize={(w, h) => useBrowserStore.getState().setFloatSize(tab.path, w, h)}
-              onDock={() => useBrowserStore.getState().toggleLayoutMode(tab.path)}
-              onClose={() => useBrowserStore.getState().toggleLayoutMode(tab.path)}
-            >
-              <BrowserView projectPath={tab.path} />
-            </FloatingPanel>
-          );
-        })}
       </div>
       <StatusBar />
     </div>

@@ -2,14 +2,16 @@
 
 ## High-Level Overview
 
-DevTools is a Tauri v2 desktop application with a React/TypeScript frontend and Rust backend. It provides six main views (Terminal, Git, Editor, Browser, SSH, Claude Chat) for each open project, with per-project isolated state and session persistence.
+DevTools is a Tauri v2 desktop application with a React/TypeScript frontend and Rust backend. It provides five main views (Terminal, Git, Editor, SSH) with integrated panes (Terminal, Claude Chat, Browser) in the terminal view, with per-project and per-pane isolated state.
 
 ```
 ┌──────────────────────────────────────────────┐
 │      React Frontend (TypeScript)             │
-│  Views: Terminal|Git|Editor|Browser|SSH|Chat │
-│  Sidebar (Ctrl+1/2/3/4/5)                    │
+│  Views: Terminal|Git|Editor|SSH              │
+│  Sidebar (Ctrl+1/2/3/4)                      │
+│  Panes: Terminal|Claude|Browser (Terminal)  │
 │  Zustand: App|Project|Pane|Git|Editor|Claude│
+│          |Browser|SSH                       │
 └────────────────┬─────────────────────────────┘
                  │ IPC (Tauri) + WebSocket (Agent)
                  ↓
@@ -17,6 +19,7 @@ DevTools is a Tauri v2 desktop application with a React/TypeScript frontend and 
 │  Rust Backend (Tauri v2 Commands)            │
 │  file_ops | git_ops | pty_mgr | ssh_mgr    │
 │  sftp_ops | claude_mgr | agent_server      │
+│  browser_ops (per-pane webview mgmt)       │
 │         OS Integration Layer                 │
 │  File I/O | Git CLI | PTY | SSH | SFTP     │
 └──────────────────────────────────────────────┘
@@ -44,11 +47,14 @@ DevTools is a Tauri v2 desktop application with a React/TypeScript frontend and 
 - Monaco Editor instance (right pane)
 - Tab close buttons and context menu
 
-#### Browser View (`browser-view.tsx`, `browser-url-bar.tsx`)
-- Native Tauri secondary webview for rendering web pages
+#### Browser Pane (`browser-pane.tsx`, `browser-url-bar.tsx`)
+- Native Tauri secondary webview for rendering web pages (one per pane)
 - URL bar with navigation (back/forward/refresh)
-- Per-project browser state (each tab has independent browser instance)
+- Per-pane browser state (multiple browsers per project via paneId keying)
+- F5/F12 shortcuts work when browser pane is focused in terminal view
 - ResizeObserver for positioning native webview within React container
+- Pin mode to keep visible across view switches
+- Float mode for overlay positioning
 
 #### SSH View (`ssh-panel.tsx`, `ssh-terminal.tsx`, `sftp-browser.tsx`, `ssh-editor-pane.tsx`)
 - Split layout: left-side SFTP file tree, right-side SSH terminal (xterm.js)
@@ -71,10 +77,10 @@ DevTools is a Tauri v2 desktop application with a React/TypeScript frontend and 
 
 #### AppStore
 ```typescript
-type AppView = "terminal" | "git" | "editor" | "browser" | "ssh";
+type AppView = "terminal" | "git" | "editor" | "ssh";
 interface: { view, setView }
 ```
-Global UI state only. Persisted to localStorage optionally.
+Global UI state only. Persisted to localStorage optionally. Browser moved to pane type.
 
 #### ProjectStore
 ```typescript
@@ -88,19 +94,21 @@ interface: {
 ```
 Tracks which projects are open. Per-app state (not per-project).
 
-#### PaneStore (Terminal + Claude)
+#### PaneStore (Terminal + Claude + Browser)
 ```typescript
 interface: {
-  panes: Record<projectPath, PaneNode>,  // Binary tree
+  trees: Record<projectPath, PaneNode>,  // Binary tree per project
+  activeIds: Record<projectPath, string>,
   getActiveId,
-  split,       // Create new pane
+  split,       // Create new pane with type
   closePane,
-  setActivePane,
-  toggleDirection  // Swap split orientation
+  setActive,
+  toggleDirection,  // Swap split orientation
+  getPaneType      // Get pane type by leaf ID
 }
-type PaneNode = { id, type: "terminal"|"claude", layout, left/right }
+type PaneNode = { id, type: "leaf"|"split", paneType?: "terminal"|"claude"|"browser" }
 ```
-Each project has its own pane tree. Panes are leaf nodes (terminal or claude chat).
+Each project has its own pane tree. Panes are leaf nodes (terminal, claude chat, or browser).
 
 #### GitStore
 ```typescript
@@ -138,7 +146,7 @@ Manages file tabs, content, and dirty tracking per project.
 #### BrowserStore
 ```typescript
 interface: {
-  states: Record<projectPath, BrowserState>,  // Per-project browser state
+  states: Record<paneId, BrowserState>,  // Per-pane browser state
   url: string,
   isLoading: boolean,
   canGoBack: boolean,
@@ -149,7 +157,7 @@ interface: {
   getState
 }
 ```
-Manages browser navigation state per project. Webview instance created lazily on first activation.
+Manages browser navigation state per pane. Supports multiple browser panes per project (keyed by paneId). Webview instance created lazily on first activation.
 
 #### SSHStore
 ```typescript

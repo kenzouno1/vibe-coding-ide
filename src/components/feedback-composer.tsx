@@ -5,17 +5,19 @@ import { useBrowserStore } from "@/stores/browser-store";
 import { usePaneStore } from "@/stores/pane-store";
 
 interface FeedbackComposerProps {
+  paneId: string;
   projectPath: string;
   screenshotPath?: string | null;
   onClose: () => void;
 }
 
 export const FeedbackComposer = memo(function FeedbackComposer({
+  paneId,
   projectPath,
   screenshotPath,
   onClose,
 }: FeedbackComposerProps) {
-  const browserState = useBrowserStore((s) => s.getState(projectPath));
+  const browserState = useBrowserStore((s) => s.getState(paneId));
   const getActivePtySessionId = usePaneStore((s) => s.getActivePtySessionId);
   const getAiPtySessionId = usePaneStore((s) => s.getAiPtySessionId);
   const [notes, setNotes] = useState("");

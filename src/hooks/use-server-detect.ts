@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "@/stores/app-store";
 import { useBrowserStore } from "@/stores/browser-store";
 
 interface PtyOutput {
@@ -13,11 +12,9 @@ const URL_REGEX = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0):(\d+)\S*/g;
 
 /**
  * Listens to terminal output and auto-detects dev server URLs.
- * When a localhost URL is found, navigates the browser if it's on about:blank.
+ * When a localhost URL is found, navigates the browser pane if it's on about:blank.
  */
-export function useServerDetect(projectPath: string) {
-  const view = useAppStore((s) => s.view);
-  const browserState = useBrowserStore((s) => s.getState(projectPath));
+export function useServerDetect(paneId: string) {
   const setUrl = useBrowserStore((s) => s.setUrl);
   // Track already-detected URLs to avoid duplicate notifications
   const detectedRef = useRef<Set<string>>(new Set());
@@ -34,18 +31,18 @@ export function useServerDetect(projectPath: string) {
         detectedRef.current.add(url);
 
         // Auto-navigate if browser is on about:blank
-        const currentState = useBrowserStore.getState().getState(projectPath);
+        const currentState = useBrowserStore.getState().getState(paneId);
         if (
           currentState.webviewCreated &&
           (currentState.url === "about:blank" || currentState.url === "")
         ) {
-          setUrl(projectPath, url);
-          invoke("navigate_browser", { projectId: projectPath, url }).catch(() => {});
+          setUrl(paneId, url);
+          invoke("navigate_browser", { paneId, url }).catch(() => {});
         }
       }
     });
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [projectPath, setUrl]);
+  }, [paneId, setUrl]);
 }

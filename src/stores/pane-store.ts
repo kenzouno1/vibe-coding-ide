@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 export type SplitDirection = "horizontal" | "vertical";
-export type PaneType = "terminal" | "claude";
+export type PaneType = "terminal" | "claude" | "browser";
 
 /** Leaf node = a single terminal pane or claude chat pane */
 interface LeafNode {

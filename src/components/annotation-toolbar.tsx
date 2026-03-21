@@ -23,7 +23,7 @@ const COLORS = [
 const STROKE_WIDTHS = [2, 4, 8];
 
 interface AnnotationToolbarProps {
-  projectPath: string;
+  paneId: string;
   onUndo: () => void;
   onRedo: () => void;
   onSave: () => void;
@@ -34,7 +34,7 @@ interface AnnotationToolbarProps {
 }
 
 export const AnnotationToolbar = memo(function AnnotationToolbar({
-  projectPath,
+  paneId,
   onUndo,
   onRedo,
   onSave,
@@ -43,7 +43,7 @@ export const AnnotationToolbar = memo(function AnnotationToolbar({
   canUndo,
   canRedo,
 }: AnnotationToolbarProps) {
-  const browserState = useBrowserStore((s) => s.getState(projectPath));
+  const browserState = useBrowserStore((s) => s.getState(paneId));
   const setTool = useBrowserStore((s) => s.setAnnotationTool);
   const setColor = useBrowserStore((s) => s.setAnnotationColor);
   const setStrokeWidth = useBrowserStore((s) => s.setAnnotationStrokeWidth);
@@ -57,7 +57,7 @@ export const AnnotationToolbar = memo(function AnnotationToolbar({
         {TOOLS.map(({ tool, icon: Icon, label }) => (
           <button
             key={tool}
-            onClick={() => setTool(projectPath, tool)}
+            onClick={() => setTool(paneId, tool)}
             title={label}
             className={`p-1.5 rounded transition-colors ${
               annotationTool === tool
@@ -77,7 +77,7 @@ export const AnnotationToolbar = memo(function AnnotationToolbar({
         {COLORS.map((color) => (
           <button
             key={color}
-            onClick={() => setColor(projectPath, color)}
+            onClick={() => setColor(paneId, color)}
             title={color}
             className={`w-5 h-5 rounded-sm border transition-all ${
               annotationColor === color
@@ -96,7 +96,7 @@ export const AnnotationToolbar = memo(function AnnotationToolbar({
         {STROKE_WIDTHS.map((w) => (
           <button
             key={w}
-            onClick={() => setStrokeWidth(projectPath, w)}
+            onClick={() => setStrokeWidth(paneId, w)}
             title={`${w}px`}
             className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
               annotationStrokeWidth === w

@@ -105,16 +105,18 @@ Base unit: 4px. Scale: 0/1/2/3/4/5/6/8/10/12/16 (multiply by 4px).
 | Switch to Terminal | `Ctrl+1` |
 | Switch to Git | `Ctrl+2` |
 | Switch to Editor | `Ctrl+3` |
-| Switch to Browser | `Ctrl+4` |
-| Switch to SSH | `Ctrl+5` |
+| Switch to SSH | `Ctrl+4` |
 | Next project tab | `Ctrl+Tab` |
 | Previous project tab | `Ctrl+Shift+Tab` |
 | **Terminal View** | |
 | Split horizontal | `Ctrl+Shift+H` |
 | Split vertical | `Ctrl+Shift+V` |
 | Split Claude pane | `Ctrl+Shift+C` |
+| Split Browser pane | `Ctrl+Shift+B` |
 | Toggle split direction | `Ctrl+Shift+T` |
 | Close pane | `Ctrl+W` |
+| Refresh browser pane | `F5` (when browser focused) |
+| Open browser DevTools | `F12` (when browser focused) |
 | **Editor View** | |
 | Save file | `Ctrl+S` |
 | Close file | `Ctrl+W` |

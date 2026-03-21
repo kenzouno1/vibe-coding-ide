@@ -147,15 +147,23 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       newActive = newTabs[Math.min(idx, newTabs.length - 1)]?.path ?? null;
     }
 
-    // Clean up Claude pane states before removing pane tree
+    // Clean up Claude and browser pane states before removing pane tree
     const paneTree = usePaneStore.getState().trees[path];
     if (paneTree) {
       const leafIds = collectLeafIds(paneTree);
       const paneStore = usePaneStore.getState();
+      const browserPaneIds: string[] = [];
       for (const leafId of leafIds) {
-        if (paneStore.getPaneType(path, leafId) === "claude") {
+        const pType = paneStore.getPaneType(path, leafId);
+        if (pType === "claude") {
           useClaudeStore.getState().removePaneState(leafId);
         }
+        if (pType === "browser") {
+          browserPaneIds.push(leafId);
+        }
+      }
+      if (browserPaneIds.length > 0) {
+        useBrowserStore.getState().removePanesForProject(browserPaneIds);
       }
     }
 
@@ -163,7 +171,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     usePaneStore.getState().removeProject(path);
     useGitStore.getState().removeProject(path);
     useEditorStore.getState().removeProject(path);
-    useBrowserStore.getState().removeProject(path);
 
     saveTabs(newTabs);
     saveActive(newActive);

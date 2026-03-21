@@ -9,9 +9,10 @@ DevTools is a lightweight, extensible desktop application for developers to mana
 ### Terminal View (Ctrl+1)
 - Multi-pane terminal emulator with xterm.js
 - Binary tree split layout (horizontal/vertical)
-- Terminal + Claude Chat pane splits (Ctrl+Shift+C)
+- Terminal, Claude Chat (Ctrl+Shift+C), and Browser (Ctrl+Shift+B) pane splits
 - Per-project terminal sessions persisted to disk
 - ANSI color support, mouse events, link detection
+- F5 to refresh browser pane, F12 to open browser DevTools
 
 ### Git View (Ctrl+2)
 - Git status visualization and file operations
@@ -27,12 +28,7 @@ DevTools is a lightweight, extensible desktop application for developers to mana
 - Auto-save via Ctrl+S, auto-language detection
 - File CRUD context menu with path traversal protection
 
-### Browser View (Ctrl+4)
-- Embedded web preview without alt-tabbing
-- Navigation controls (back/forward/reload)
-- Per-project isolated browser state
-
-### SSH View (Ctrl+5)
+### SSH View (Ctrl+4)
 - Remote terminal with xterm.js
 - SFTP file browser (left pane) + SSH terminal (right pane)
 - SSH preset management (save/load connection profiles)
@@ -40,13 +36,20 @@ DevTools is a lightweight, extensible desktop application for developers to mana
 - SSH editor pane for editing remote files in Monaco
 
 ### Claude Chat Pane (Terminal split)
-- Embedded AI chat integrated into terminal splits
+- Embedded AI chat integrated into terminal splits (Ctrl+Shift+C)
 - Slash commands: /clear, /new, /cost, /help (local) + global ~/.claude/commands/
 - File attachments via clipboard paste, drag-drop, file picker
 - Model selector (Default, Opus 4.6, Sonnet 4.6, Haiku 4.5)
 - Permission modes: Default, Plan, Accept Edits, Bypass, Ask
 - Session persistence via localStorage
 - Cost tracking and streaming responses with tool use blocks
+
+### Browser Pane (Ctrl+Shift+B)
+- Embedded web preview integrated into terminal splits
+- Navigation controls (back/forward/reload)
+- Per-pane browser state (multiple browsers per project supported)
+- Pin mode to keep visible across view switches
+- Float mode for overlay positioning
 
 ## Project Structure
 
@@ -77,13 +80,13 @@ devtools/
 ## Architecture Overview
 
 ### Frontend State Management (Zustand)
-- **AppStore** — Current view (terminal/git/editor/browser/ssh), global UI state
+- **AppStore** — Current view (terminal/git/editor/ssh), global UI state
 - **ProjectStore** — Open project tabs, active tab tracking
-- **PaneStore** — Terminal/Claude split pane tree per project, pane type (terminal|claude)
+- **PaneStore** — Terminal/Claude/Browser split pane tree per project, pane type (terminal|claude|browser)
 - **GitStore** — Staged/unstaged files, selected file, commit state
 - **EditorStore** — Open file tabs, active file, dirty tracking, cursor position
 - **ClaudeStore** — Per-pane chat state: messages, streaming, session, cost, model, permissions, attachments
-- **BrowserStore** — Per-project browser URL, loading state, navigation capability
+- **BrowserStore** — Per-pane browser state: URL, loading state, navigation capability (keyed by paneId)
 - **SSHStore** — SSH connection, presets, SFTP file tree, terminal output
 - **SSHEditorStore** — Remote file editing state for SSH editor pane
 
@@ -123,15 +126,17 @@ On startup, projects reload saved sessions from disk.
 | Global | Switch Terminal | `Ctrl+1` |
 | Global | Switch Git | `Ctrl+2` |
 | Global | Switch Editor | `Ctrl+3` |
-| Global | Switch Browser | `Ctrl+4` |
-| Global | Switch SSH | `Ctrl+5` |
+| Global | Switch SSH | `Ctrl+4` |
 | Global | Next project tab | `Ctrl+Tab` |
 | Global | Prev project tab | `Ctrl+Shift+Tab` |
 | Terminal | Split horizontal | `Ctrl+Shift+H` |
 | Terminal | Split vertical | `Ctrl+Shift+V` |
 | Terminal | Split Claude pane | `Ctrl+Shift+C` |
+| Terminal | Split Browser pane | `Ctrl+Shift+B` |
 | Terminal | Toggle split direction | `Ctrl+Shift+T` |
 | Terminal | Close pane | `Ctrl+W` |
+| Terminal | Refresh browser pane | `F5` (when browser focused) |
+| Terminal | Open browser DevTools | `F12` (when browser focused) |
 | Editor | Save file | `Ctrl+S` |
 | Editor | Close file | `Ctrl+W` |
 | Git | Commit | `Ctrl+Enter` |

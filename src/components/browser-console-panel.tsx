@@ -74,15 +74,17 @@ const ConsoleLogEntry = memo(function ConsoleLogEntry({ log, onSend }: ConsoleLo
 });
 
 interface BrowserConsolePanelProps {
+  paneId: string;
   projectPath: string;
   onOpenFeedback?: () => void;
 }
 
 export const BrowserConsolePanel = memo(function BrowserConsolePanel({
+  paneId,
   projectPath,
   onOpenFeedback,
 }: BrowserConsolePanelProps) {
-  const browserState = useBrowserStore((s) => s.getState(projectPath));
+  const browserState = useBrowserStore((s) => s.getState(paneId));
   const clearLogs = useBrowserStore((s) => s.clearLogs);
   const setConsoleFilter = useBrowserStore((s) => s.setConsoleFilter);
   const toggleConsolePanel = useBrowserStore((s) => s.toggleConsolePanel);
@@ -146,7 +148,7 @@ export const BrowserConsolePanel = memo(function BrowserConsolePanel({
       {/* Console toolbar */}
       <div className="flex items-center gap-1 px-2 py-1 border-b border-ctp-surface0">
         <button
-          onClick={() => toggleConsolePanel(projectPath)}
+          onClick={() => toggleConsolePanel(paneId)}
           className="p-1 rounded hover:bg-ctp-surface0 text-ctp-overlay1 hover:text-ctp-text transition-colors"
           title={consolePanelOpen ? "Collapse console" : "Expand console"}
         >
@@ -175,7 +177,7 @@ export const BrowserConsolePanel = memo(function BrowserConsolePanel({
             {FILTER_OPTIONS.map(({ value, label }) => (
               <button
                 key={value}
-                onClick={() => setConsoleFilter(projectPath, value)}
+                onClick={() => setConsoleFilter(paneId, value)}
                 className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
                   consoleFilter === value
                     ? "bg-ctp-surface1 text-ctp-text"
@@ -214,7 +216,7 @@ export const BrowserConsolePanel = memo(function BrowserConsolePanel({
 
         {/* Clear button */}
         <button
-          onClick={() => clearLogs(projectPath)}
+          onClick={() => clearLogs(paneId)}
           className="p-1 rounded hover:bg-ctp-surface0 text-ctp-overlay1 hover:text-ctp-text transition-colors"
           title="Clear console"
         >
