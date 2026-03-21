@@ -133,6 +133,7 @@ pub fn run() {
             browser_ops::flush_browser_logs,
             agent_audit::agent_get_audit_log,
             claude_manager::claude_agent_workspace_path,
+            claude_manager::claude_ssh_workspace,
             claude_manager::claude_check_installed,
             claude_manager::claude_send_message,
             claude_manager::claude_cancel,

@@ -59,6 +59,47 @@ pub fn claude_agent_workspace_path() -> Result<String, String> {
         .ok_or_else(|| "Invalid workspace path".to_string())
 }
 
+/// Create per-session SSH workspace with CLAUDE.md containing session context.
+/// Returns path to `~/.devtools/agent-workspace/sessions/<connId>/`.
+#[tauri::command]
+pub fn claude_ssh_workspace(
+    conn_id: String,
+    host: String,
+    username: String,
+) -> Result<String, String> {
+    let home = dirs::home_dir().ok_or("Cannot determine home directory")?;
+    let parent_ws = home.join(".devtools").join("agent-workspace");
+    let session_ws = parent_ws.join("sessions").join(&conn_id);
+    fs::create_dir_all(&session_ws).map_err(|e| format!("{e}"))?;
+
+    let parent_path = parent_ws.to_str().unwrap_or("~/.devtools/agent-workspace");
+    let claude_md = format!(
+        "# SSH Session — {username}@{host}\n\n\
+         - **Session ID:** `{conn_id}`\n\
+         - **Host:** {host}\n\
+         - **User:** {username}\n\n\
+         You are connected to **{host}** as **{username}**.\n\n\
+         ## Tools\n\n\
+         SSH tools are located at `{parent_path}`.\n\n\
+         ```bash\n\
+         node {parent_path}/ssh-exec.js list\n\
+         node {parent_path}/ssh-exec.js exec {conn_id} \"command\"\n\
+         node {parent_path}/ssh-exec.js write {conn_id} \"data\"\n\
+         node {parent_path}/ssh-exec.js read {conn_id} 3\n\
+         ```\n",
+        username = username,
+        host = host,
+        conn_id = conn_id,
+        parent_path = parent_path.replace('\\', "/"),
+    );
+    let _ = fs::write(session_ws.join("CLAUDE.md"), claude_md);
+
+    session_ws
+        .to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Invalid path".to_string())
+}
+
 /// Check if `claude` CLI is available on PATH
 #[tauri::command]
 pub fn claude_check_installed() -> Result<bool, String> {

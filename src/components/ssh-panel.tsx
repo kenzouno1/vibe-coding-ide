@@ -11,17 +11,35 @@ import { SshTabBar } from "@/components/ssh-tab-bar";
 import { ClaudeChatPane } from "@/components/claude-chat-pane";
 import { SplitHandle } from "@/components/split-handle";
 
+/** Per-session Claude pane — creates workspace with CLAUDE.md containing session context */
+function SshClaudePane({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+  const [wsPath, setWsPath] = useState<string | null>(null);
+  const host = useSshStore((s) => {
+    const conn = s.connections[sessionId];
+    if (!conn) return null;
+    return s.savedSessions.find((ss) => ss.id === conn.sessionId)?.host ?? null;
+  });
+  const username = useSshStore((s) => {
+    const conn = s.connections[sessionId];
+    if (!conn) return null;
+    return s.savedSessions.find((ss) => ss.id === conn.sessionId)?.username ?? null;
+  });
+
+  useEffect(() => {
+    if (!host || !username) return;
+    invoke<string>("claude_ssh_workspace", { connId: sessionId, host, username })
+      .then(setWsPath)
+      .catch(() => {});
+  }, [sessionId, host, username]);
+
+  if (!wsPath) return null;
+  return <ClaudeChatPane projectPath={wsPath} paneId={`ssh-claude-${sessionId}`} onClose={onClose} />;
+}
+
 export function SshPanel() {
   const tabOrder = useSshStore((s) => s.tabOrder);
   const activeSessionId = useSshStore((s) => s.activeSessionId);
   const editorStates = useEditorStore((s) => s.states);
-  // Agent workspace path for SSH AI panel
-  const [agentWorkspacePath, setAgentWorkspacePath] = useState(".");
-  useEffect(() => {
-    invoke<string>("claude_agent_workspace_path")
-      .then(setAgentWorkspacePath)
-      .catch(() => {});
-  }, []);
   const [showPresetManager, setShowPresetManager] = useState(false);
   const [sftpRatio, setSftpRatio] = useState(0.2);
   const [agentRatio, setAgentRatio] = useState(0.7);
@@ -113,11 +131,7 @@ export function SshPanel() {
                     style={{ flexBasis: `${(1 - agentRatio) * 100}%` }}
                     className="min-w-0 h-full overflow-hidden"
                   >
-                    <ClaudeChatPane
-                      projectPath={agentWorkspacePath}
-                      paneId={`ssh-claude-${sessionId}`}
-                      onClose={hideAgent}
-                    />
+                    <SshClaudePane sessionId={sessionId} onClose={hideAgent} />
                   </div>
                 </>
               )}
