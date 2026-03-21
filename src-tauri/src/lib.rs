@@ -1,16 +1,19 @@
+mod agent_audit;
+mod agent_config;
 mod agent_protocol;
 mod agent_server;
 mod browser_ops;
+mod claude_manager;
 mod clipboard_helper;
 mod file_ops;
 mod git_ops;
-mod ime_handler;
 mod pty_manager;
 mod session_store;
 mod sftp_ops;
 mod ssh_manager;
 mod ssh_presets;
 
+use claude_manager::ClaudeState;
 use pty_manager::PtyState;
 use ssh_manager::SshState;
 use std::sync::Arc;
@@ -25,6 +28,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(PtyState::new())
+        .manage(ClaudeState::new())
         .manage(ssh_state)
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
@@ -36,20 +40,19 @@ pub fn run() {
                 )?;
             }
 
-            // Install native IME handler for Vietnamese input (EVKey/UniKey)
-            if let Some(window) = app.webview_windows().values().next() {
-                ime_handler::install_ime_handler(app.handle(), window);
-            }
-
             // Start agent WebSocket server for AI CLI integration
             // Use std::thread + new Tokio runtime since Tauri's setup doesn't run inside a Tokio context
             let token = uuid::Uuid::new_v4().to_string();
             let sessions = Arc::clone(&agent_sessions);
             let output_tx = agent_output_tx.clone();
+            let audit_log = Arc::new(agent_audit::AuditLog::new());
+            let audit_for_server = Arc::clone(&audit_log);
+            let app_handle = app.handle().clone();
+            app.handle().manage(audit_log);
             std::thread::spawn(move || {
                 let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
                 rt.block_on(async move {
-                    agent_server::start_agent_server_with_refs(sessions, output_tx, token).await;
+                    agent_server::start_agent_server_with_refs(sessions, output_tx, token, audit_for_server, app_handle).await;
                 });
             });
 
@@ -104,6 +107,7 @@ pub fn run() {
             sftp_ops::sftp_chmod,
             sftp_ops::sftp_rename,
             sftp_ops::sftp_copy,
+            sftp_ops::sftp_download_to_temp,
             sftp_ops::sftp_stat,
             ssh_presets::ssh_preset_list,
             ssh_presets::ssh_preset_save,
@@ -127,6 +131,15 @@ pub fn run() {
             browser_ops::write_screenshot,
             browser_ops::open_browser_devtools,
             browser_ops::flush_browser_logs,
+            agent_audit::agent_get_audit_log,
+            claude_manager::claude_agent_workspace_path,
+            claude_manager::claude_check_installed,
+            claude_manager::claude_send_message,
+            claude_manager::claude_cancel,
+            claude_manager::claude_save_temp_file,
+            claude_manager::claude_cleanup_temp_files,
+            claude_manager::claude_discover_commands,
+            claude_manager::claude_list_sessions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

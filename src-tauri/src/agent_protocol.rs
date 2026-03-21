@@ -81,4 +81,11 @@ pub enum AgentResponse {
         id: Option<u64>,
         message: String,
     },
+
+    #[serde(rename = "denied")]
+    Denied {
+        id: u64,
+        command: String,
+        reason: String,
+    },
 }

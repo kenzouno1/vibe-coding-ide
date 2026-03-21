@@ -1,3 +1,5 @@
+use crate::agent_audit::{self, AuditLog};
+use crate::agent_config::AgentConfig;
 use crate::agent_protocol::{AgentRequest, AgentResponse};
 use crate::ssh_manager::{SshSession, SessionInfo};
 use futures_util::{SinkExt, StreamExt};
@@ -10,14 +12,20 @@ use tokio_tungstenite::tungstenite::Message;
 struct AgentState {
     sessions: Arc<Mutex<HashMap<String, SshSession>>>,
     output_tx: broadcast::Sender<(String, String, String)>,
+    config: AgentConfig,
+    audit: Arc<AuditLog>,
+    app: tauri::AppHandle,
 }
 
 pub async fn start_agent_server_with_refs(
     sessions: Arc<Mutex<HashMap<String, SshSession>>>,
     output_tx: broadcast::Sender<(String, String, String)>,
     token: String,
+    audit: Arc<AuditLog>,
+    app: tauri::AppHandle,
 ) {
-    let state = Arc::new(AgentState { sessions, output_tx });
+    let config = AgentConfig::load();
+    let state = Arc::new(AgentState { sessions, output_tx, config, audit, app });
     let mut bound_port = 0u16;
     let mut listener = None;
     for port in 9876..=9880 {
@@ -48,8 +56,16 @@ pub async fn start_agent_server_with_refs(
 fn write_token_file(token: &str, port: u16) -> Result<(), String> {
     let dir = dirs::home_dir().unwrap_or_default().join(".devtools");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("agent-token");
     let c = format!("{{\"token\":\"{token}\",\"port\":{port}}}");
-    std::fs::write(dir.join("agent-token"), c).map_err(|e| e.to_string())
+    std::fs::write(&path, c).map_err(|e| e.to_string())?;
+    // Restrict permissions to owner-only on Unix
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
 }
 
 type Ws = tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>;
@@ -127,9 +143,30 @@ async fn handle_client(ws: Ws, state: Arc<AgentState>, token: String) {
                 AgentResponse::Result { id, data: "unsubscribed".into() }
             }
             AgentRequest::Execute { id, session_id, channel_id, command, timeout_ms, prompt_pattern } => {
-                match exec_cmd(&state, &session_id, &channel_id, &command, timeout_ms, prompt_pattern.as_deref()).await {
-                    Ok((out, to)) => AgentResponse::Result { id, data: serde_json::json!({"output": out, "timed_out": to}) },
-                    Err(e) => AgentResponse::Error { id: Some(id), message: e },
+                // Security: check command against blocklist
+                if let Some(pattern) = state.config.check_command(&command) {
+                    let entry = agent_audit::make_entry(&session_id, &command, "denied", 0, &format!("Blocked: {pattern}"));
+                    state.audit.record(entry, &state.app);
+                    AgentResponse::Denied { id, command: command.clone(), reason: format!("Blocked by pattern: {pattern}") }
+                } else {
+                    let clamped_timeout = state.config.clamp_timeout(timeout_ms);
+                    let start = std::time::Instant::now();
+                    match exec_cmd(&state, &session_id, &channel_id, &command, clamped_timeout, prompt_pattern.as_deref()).await {
+                        Ok((out, to)) => {
+                            let duration = start.elapsed().as_millis() as u64;
+                            let status = if to { "timeout" } else { "ok" };
+                            let output = state.config.truncate_output(&out);
+                            let entry = agent_audit::make_entry(&session_id, &command, status, duration, &output);
+                            state.audit.record(entry, &state.app);
+                            AgentResponse::Result { id, data: serde_json::json!({"output": output, "timed_out": to}) }
+                        }
+                        Err(e) => {
+                            let duration = start.elapsed().as_millis() as u64;
+                            let entry = agent_audit::make_entry(&session_id, &command, "error", duration, &e);
+                            state.audit.record(entry, &state.app);
+                            AgentResponse::Error { id: Some(id), message: e }
+                        }
+                    }
                 }
             }
             AgentRequest::OpenChannel { id, .. } => {
