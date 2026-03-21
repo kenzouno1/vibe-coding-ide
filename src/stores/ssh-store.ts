@@ -116,7 +116,7 @@ export const useSshStore = create<SshStore>((set, get) => ({
       privateKeyPath: session.private_key_path ?? null,
     });
 
-    const initialPaneId = usePaneStore.getState().getTree(connId).id;
+    const initialPaneId = usePaneStore.getState().initSingleLeaf(connId);
 
     set((s) => ({
       connections: {

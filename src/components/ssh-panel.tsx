@@ -1,20 +1,33 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Bot } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { useSshStore } from "@/stores/ssh-store";
+import { useEditorStore } from "@/stores/editor-store";
 import { SftpBrowser } from "@/components/sftp-browser";
 import { SshSplitPaneContainer } from "@/components/ssh-split-pane-container";
+import { SshEditorPane } from "@/components/ssh-editor-pane";
 import { SshPresetManager } from "@/components/ssh-preset-manager";
 import { SshTabBar } from "@/components/ssh-tab-bar";
-import { SshAgentTerminal } from "@/components/ssh-agent-terminal";
+import { ClaudeChatPane } from "@/components/claude-chat-pane";
 import { SplitHandle } from "@/components/split-handle";
 
 export function SshPanel() {
   const tabOrder = useSshStore((s) => s.tabOrder);
   const activeSessionId = useSshStore((s) => s.activeSessionId);
+  const editorStates = useEditorStore((s) => s.states);
+  // Agent workspace path for SSH AI panel
+  const [agentWorkspacePath, setAgentWorkspacePath] = useState(".");
+  useEffect(() => {
+    invoke<string>("claude_agent_workspace_path")
+      .then(setAgentWorkspacePath)
+      .catch(() => {});
+  }, []);
   const [showPresetManager, setShowPresetManager] = useState(false);
   const [sftpRatio, setSftpRatio] = useState(0.2);
   const [agentRatio, setAgentRatio] = useState(0.7);
+  const [editorRatio, setEditorRatio] = useState(0.5);
   const [showAgent, setShowAgent] = useState(false);
+  const hideAgent = useCallback(() => setShowAgent(false), []);
 
   // No sessions or explicitly showing preset manager
   if (tabOrder.length === 0 || showPresetManager) {
@@ -35,7 +48,7 @@ export function SshPanel() {
     );
   }
 
-  // Layout: SFTP | SSH Terminal | (optional) Agent Terminal
+  // Layout: SFTP | SSH Terminal | (optional) Claude Panel
   return (
     <div className="h-full flex flex-col">
       <SshTabBar
@@ -64,19 +77,35 @@ export function SshPanel() {
               </div>
               <SplitHandle direction="horizontal" onResize={setSftpRatio} />
 
-              {/* SSH terminal */}
+              {/* Editor + SSH terminal (vertical split when editor has open files) */}
               <div
                 style={{
                   flexBasis: showAgent
                     ? `${(agentRatio - sftpRatio) * 100}%`
                     : `${(1 - sftpRatio) * 100}%`,
                 }}
-                className="min-w-0 h-full overflow-hidden"
+                className="min-w-0 h-full overflow-hidden flex flex-col"
               >
-                <SshSplitPaneContainer sessionId={sessionId} />
+                {(editorStates[sessionId]?.openFiles.length ?? 0) > 0 && (
+                  <>
+                    <div
+                      style={{ flexBasis: `${editorRatio * 100}%` }}
+                      className="min-h-0 overflow-hidden"
+                    >
+                      <SshEditorPane sessionId={sessionId} />
+                    </div>
+                    <SplitHandle
+                      direction="vertical"
+                      onResize={setEditorRatio}
+                    />
+                  </>
+                )}
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <SshSplitPaneContainer sessionId={sessionId} />
+                </div>
               </div>
 
-              {/* Agent terminal (toggleable) */}
+              {/* Claude chat panel (toggleable) */}
               {showAgent && (
                 <>
                   <SplitHandle direction="horizontal" onResize={setAgentRatio} />
@@ -84,7 +113,11 @@ export function SshPanel() {
                     style={{ flexBasis: `${(1 - agentRatio) * 100}%` }}
                     className="min-w-0 h-full overflow-hidden"
                   >
-                    <SshAgentTerminal />
+                    <ClaudeChatPane
+                      projectPath={agentWorkspacePath}
+                      paneId={`ssh-claude-${sessionId}`}
+                      onClose={hideAgent}
+                    />
                   </div>
                 </>
               )}

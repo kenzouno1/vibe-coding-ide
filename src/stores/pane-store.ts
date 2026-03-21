@@ -49,6 +49,8 @@ interface PaneStore {
   /** Find PTY session running AI CLI (claude/codex) for this project */
   getAiPtySessionId: (projectPath: string) => string | null;
   removeProject: (projectPath: string) => void;
+  /** Initialize a single-leaf tree (used by SSH connections) */
+  initSingleLeaf: (projectPath: string) => string;
 }
 
 let nextId = 1;
@@ -271,4 +273,14 @@ export const usePaneStore = create<PaneStore>((set, get) => ({
       const { [projectPath]: _active, ...restActiveIds } = s.activeIds;
       return { trees: restTrees, activeIds: restActiveIds };
     }),
+
+  initSingleLeaf: (projectPath) => {
+    const leafId = genId();
+    const tree: PaneNode = { type: "leaf", id: leafId, paneType: "terminal" };
+    set((s) => ({
+      trees: { ...s.trees, [projectPath]: tree },
+      activeIds: { ...s.activeIds, [projectPath]: leafId },
+    }));
+    return leafId;
+  },
 }));
