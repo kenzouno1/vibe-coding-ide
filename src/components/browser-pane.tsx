@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState, memo } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "@/stores/app-store";
@@ -9,6 +10,7 @@ import { BrowserUrlBar } from "@/components/browser-url-bar";
 import { BrowserConsolePanel } from "@/components/browser-console-panel";
 import { AnnotationOverlay } from "@/components/annotation-overlay";
 import { FeedbackComposer } from "@/components/feedback-composer";
+import { FloatingPanel } from "@/components/floating-panel";
 import { useServerDetect } from "@/hooks/use-server-detect";
 
 interface BrowserPaneProps {
@@ -88,11 +90,11 @@ export const BrowserPane = memo(function BrowserPane({
       .finally(() => { creatingRef.current = false; });
   }, [isVisible, paneId, browserState.webviewCreated, browserState.url, markWebviewCreated]);
 
-  // Show/hide webview based on visibility (pinned panes skip hide)
+  // Show/hide webview based on visibility (pinned/float panes skip hide)
   useEffect(() => {
     if (!browserState.webviewCreated) return;
-    const isPinned = browserState.layoutMode === "pinned";
-    if (isVisible || isPinned) {
+    const staysVisible = browserState.layoutMode === "pinned" || browserState.layoutMode === "float";
+    if (isVisible || staysVisible) {
       invoke("show_browser_webview", { paneId })
         .then(() => syncBounds())
         .catch(() => {});
@@ -201,12 +203,12 @@ export const BrowserPane = memo(function BrowserPane({
     };
   }, [paneId]);
 
-  return (
-    <div
-      className="flex flex-col h-full w-full relative"
-      onMouseDown={onFocus}
-      data-pane-active={isActive}
-    >
+  const setFloatPosition = useBrowserStore((s) => s.setFloatPosition);
+  const setFloatSize = useBrowserStore((s) => s.setFloatSize);
+  const toggleFloatMode = useBrowserStore((s) => s.toggleFloatMode);
+
+  const browserContent = (
+    <>
       <BrowserUrlBar paneId={paneId} />
       <div ref={containerRef} className="flex-1 bg-ctp-crust relative">
         {!browserState.webviewCreated && (
@@ -224,6 +226,44 @@ export const BrowserPane = memo(function BrowserPane({
       {feedbackOpen && (
         <FeedbackComposer paneId={paneId} projectPath={projectPath} onClose={() => setFeedbackOpen(false)} />
       )}
+    </>
+  );
+
+  // Float mode: render in FloatingPanel via portal
+  if (browserState.layoutMode === "float") {
+    return (
+      <>
+        <div className="h-full w-full flex items-center justify-center text-ctp-overlay0 text-sm bg-ctp-crust"
+          onMouseDown={onFocus}>
+          Browser floating — click dock to return
+        </div>
+        {createPortal(
+          <FloatingPanel
+            x={browserState.floatX}
+            y={browserState.floatY}
+            width={browserState.floatWidth}
+            height={browserState.floatHeight}
+            title={browserState.title || browserState.url || "Browser"}
+            onMove={(x, y) => setFloatPosition(paneId, x, y)}
+            onResize={(w, h) => setFloatSize(paneId, w, h)}
+            onDock={() => toggleFloatMode(paneId)}
+            onClose={() => toggleFloatMode(paneId)}
+          >
+            <div className="flex flex-col h-full w-full">{browserContent}</div>
+          </FloatingPanel>,
+          document.body,
+        )}
+      </>
+    );
+  }
+
+  return (
+    <div
+      className="flex flex-col h-full w-full relative"
+      onMouseDown={onFocus}
+      data-pane-active={isActive}
+    >
+      {browserContent}
     </div>
   );
 });

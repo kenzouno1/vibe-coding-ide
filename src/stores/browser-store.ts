@@ -29,8 +29,12 @@ export interface BrowserState {
   annotationTool: AnnotationTool;
   annotationColor: string;
   annotationStrokeWidth: number;
-  // Layout mode: docked in pane tree, pinned stays visible across view switches
-  layoutMode: "docked" | "pinned";
+  // Layout mode: docked in pane tree, float as draggable overlay, pinned stays visible across views
+  layoutMode: "docked" | "float" | "pinned";
+  floatX: number;
+  floatY: number;
+  floatWidth: number;
+  floatHeight: number;
 }
 
 const DEFAULT_STATE: BrowserState = {
@@ -49,6 +53,10 @@ const DEFAULT_STATE: BrowserState = {
   annotationColor: "#f38ba8",
   annotationStrokeWidth: 3,
   layoutMode: "docked",
+  floatX: 100,
+  floatY: 100,
+  floatWidth: 480,
+  floatHeight: 360,
 };
 
 interface BrowserStore {
@@ -68,7 +76,10 @@ interface BrowserStore {
   setAnnotationTool: (paneId: string, tool: AnnotationTool) => void;
   setAnnotationColor: (paneId: string, color: string) => void;
   setAnnotationStrokeWidth: (paneId: string, width: number) => void;
+  toggleFloatMode: (paneId: string) => void;
   togglePinMode: (paneId: string) => void;
+  setFloatPosition: (paneId: string, x: number, y: number) => void;
+  setFloatSize: (paneId: string, width: number, height: number) => void;
   /** Remove state for a single browser pane and destroy its webview */
   removePaneState: (paneId: string) => void;
   /** Remove all browser pane states for a project (on tab close) */
@@ -143,6 +154,14 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
   setAnnotationStrokeWidth: (paneId, width) =>
     set((s) => ({ states: updateState(s.states, paneId, { annotationStrokeWidth: width }) })),
 
+  toggleFloatMode: (paneId) =>
+    set((s) => {
+      const current = s.states[paneId] ?? DEFAULT_STATE;
+      return { states: updateState(s.states, paneId, {
+        layoutMode: current.layoutMode === "float" ? "docked" : "float",
+      }) };
+    }),
+
   togglePinMode: (paneId) =>
     set((s) => {
       const current = s.states[paneId] ?? DEFAULT_STATE;
@@ -150,6 +169,12 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
         layoutMode: current.layoutMode === "pinned" ? "docked" : "pinned",
       }) };
     }),
+
+  setFloatPosition: (paneId, x, y) =>
+    set((s) => ({ states: updateState(s.states, paneId, { floatX: x, floatY: y }) })),
+
+  setFloatSize: (paneId, width, height) =>
+    set((s) => ({ states: updateState(s.states, paneId, { floatWidth: width, floatHeight: height }) })),
 
   removePaneState: (paneId) => {
     invoke("destroy_browser_webview", { paneId }).catch(() => {});

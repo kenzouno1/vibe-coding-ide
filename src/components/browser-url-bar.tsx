@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { ArrowLeft, ArrowRight, RotateCw, Loader2, Camera, Pin } from "lucide-react";
+import { ArrowLeft, ArrowRight, RotateCw, Loader2, Camera, Pin, Maximize2, PanelTop } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useBrowserStore } from "@/stores/browser-store";
 
@@ -10,6 +10,7 @@ interface BrowserUrlBarProps {
 export function BrowserUrlBar({ paneId }: BrowserUrlBarProps) {
   const browserState = useBrowserStore((s) => s.getState(paneId));
   const setUrl = useBrowserStore((s) => s.setUrl);
+  const toggleFloatMode = useBrowserStore((s) => s.toggleFloatMode);
   const togglePinMode = useBrowserStore((s) => s.togglePinMode);
   const [inputValue, setInputValue] = useState(browserState.url);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -142,6 +143,15 @@ export function BrowserUrlBar({ paneId }: BrowserUrlBarProps) {
         className="p-1.5 rounded hover:bg-ctp-surface0 text-ctp-overlay1 hover:text-ctp-mauve transition-colors"
       >
         <Camera size={16} />
+      </button>
+
+      {/* Float/dock toggle */}
+      <button
+        onClick={() => toggleFloatMode(paneId)}
+        title={browserState.layoutMode === "float" ? "Dock browser" : "Undock browser"}
+        className="p-1.5 rounded hover:bg-ctp-surface0 text-ctp-overlay1 hover:text-ctp-text transition-colors"
+      >
+        {browserState.layoutMode === "float" ? <PanelTop size={16} /> : <Maximize2 size={16} />}
       </button>
 
       {/* Pin toggle — keep visible across views */}
