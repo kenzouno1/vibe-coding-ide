@@ -56,10 +56,22 @@ function genId() {
   return `pane-${nextId++}`;
 }
 
-/** Create a default single-leaf tree */
+/** Create default tree: 1 terminal + 1 AI agent side by side */
 function createDefaultTree(): { tree: PaneNode; activeId: string } {
-  const id = genId();
-  return { tree: { type: "leaf", id, paneType: "terminal" }, activeId: id };
+  const terminalId = genId();
+  const claudeId = genId();
+  const splitId = genId();
+  return {
+    tree: {
+      type: "split",
+      id: splitId,
+      direction: "horizontal",
+      ratio: 0.5,
+      first: { type: "leaf", id: terminalId, paneType: "terminal" },
+      second: { type: "leaf", id: claudeId, paneType: "claude" },
+    },
+    activeId: terminalId,
+  };
 }
 
 /** Find a leaf node's pane type by walking the tree */

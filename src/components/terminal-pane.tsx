@@ -3,7 +3,6 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { usePty } from "@/hooks/use-pty";
-import { setupImeHandler } from "@/hooks/use-ime-handler";
 import { useAppStore } from "@/stores/app-store";
 import { useProjectStore } from "@/stores/project-store";
 import { usePaneStore } from "@/stores/pane-store";
@@ -93,28 +92,25 @@ export const TerminalPane = memo(function TerminalPane({
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
+    // Guard: skip fit if container is too small (not yet laid out by portal reparenting)
+    const MIN_FIT_SIZE = 50;
+    const safeFit = (): boolean => {
+      const el = containerRef.current;
+      if (!el || el.clientWidth < MIN_FIT_SIZE || el.clientHeight < MIN_FIT_SIZE) return false;
+      fitAddon.fit();
+      return true;
+    };
+
     // Defer initial fit — portal container may not have final layout
-    // dimensions immediately after DOM insertion (especially with
-    // the createElement + useLayoutEffect reparenting pattern).
-    requestAnimationFrame(() => fitAddon.fit());
+    // dimensions immediately after DOM insertion.
+    requestAnimationFrame(() => safeFit());
 
-    // Setup IME composition handler — intercepts Vietnamese IME input
-    // (backspace-replace method) and sends composed text to PTY correctly.
-    const { state: imeState, cleanup: imeCleanup } = setupImeHandler(
-      containerRef.current,
-      write
-    );
-
-    // Send terminal data to PTY, but skip during IME composition
-    // (composed text is sent via compositionend handler instead)
     term.onData((data) => {
-      if (!imeState.composing) write(data);
+      write(data);
     });
 
-    // Handle copy (Ctrl+C) and block keys during IME
+    // Handle copy (Ctrl+C)
     term.attachCustomKeyEventHandler((e) => {
-      // Block xterm key processing during IME composition
-      if (imeState.composing) return false;
       if (e.type === "keydown" && e.ctrlKey && e.key === "c" && term.hasSelection()) {
         navigator.clipboard.writeText(term.getSelection());
         return false;
@@ -135,22 +131,29 @@ export const TerminalPane = memo(function TerminalPane({
     // Use rAF inside timeout to ensure layout is fully resolved.
     setTimeout(() => {
       requestAnimationFrame(() => {
-        fitAddon.fit();
-        resize(term.rows, term.cols);
+        if (safeFit()) {
+          resize(term.rows, term.cols);
+        }
       });
     }, 300);
 
-    // Re-render terminal when window regains focus (canvas content lost while hidden)
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        requestAnimationFrame(() => {
-          fitAddon.fit();
+    // Re-render terminal when window regains focus (canvas content lost while hidden).
+    // visibilitychange covers minimize/restore; window focus covers alt-tab
+    // (Tauri desktop windows don't change visibilityState on alt-tab).
+    const refreshTerminal = () => {
+      requestAnimationFrame(() => {
+        if (safeFit()) {
           resize(term.rows, term.cols);
           term.refresh(0, term.rows - 1);
-        });
-      }
+        }
+      });
     };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshTerminal();
+    };
+    const onWindowFocus = () => refreshTerminal();
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onWindowFocus);
 
     const resizeObserver = new ResizeObserver(() => {
       // Skip resize when terminal is hidden
@@ -158,16 +161,17 @@ export const TerminalPane = memo(function TerminalPane({
       if (activeTabRef.current !== projectPath) return;
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
       resizeTimerRef.current = setTimeout(() => {
-        fitAddon.fit();
-        resize(term.rows, term.cols);
+        if (safeFit()) {
+          resize(term.rows, term.cols);
+        }
       }, 150);
     });
     resizeObserver.observe(containerRef.current);
 
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onWindowFocus);
       containerRef.current?.removeEventListener("paste", onPaste, { capture: true } as EventListenerOptions);
-      imeCleanup();
       resizeObserver.disconnect();
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
       term.dispose();
@@ -178,18 +182,23 @@ export const TerminalPane = memo(function TerminalPane({
   useEffect(() => {
     const isVisible = view === "terminal" && activeTabPath === projectPath;
     if (isVisible && fitAddonRef.current && termRef.current) {
+      const el = containerRef.current;
       // Use rAF to ensure container has correct dimensions after visibility change
       requestAnimationFrame(() => {
+        if (!el || el.clientWidth < 50 || el.clientHeight < 50) return;
         fitAddonRef.current?.fit();
         if (termRef.current) {
           resize(termRef.current.rows, termRef.current.cols);
+          termRef.current.refresh(0, termRef.current.rows - 1);
         }
       });
     }
   }, [view, activeTabPath, projectPath, resize]);
 
   useEffect(() => {
-    if (isActive && activeTabPath === projectPath) termRef.current?.focus();
+    if (isActive && activeTabPath === projectPath) {
+      termRef.current?.focus();
+    }
   }, [isActive, activeTabPath, projectPath]);
 
   return (
