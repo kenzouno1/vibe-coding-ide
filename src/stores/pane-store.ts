@@ -1,11 +1,13 @@
 import { create } from "zustand";
 
 export type SplitDirection = "horizontal" | "vertical";
+export type PaneType = "terminal" | "claude";
 
-/** Leaf node = a single terminal pane */
+/** Leaf node = a single terminal pane or claude chat pane */
 interface LeafNode {
   type: "leaf";
   id: string;
+  paneType: PaneType;
 }
 
 /** Split node = two children with a direction and ratio */
@@ -33,9 +35,13 @@ interface PaneStore {
   getTree: (projectPath: string) => PaneNode;
   getActiveId: (projectPath: string) => string;
   setActive: (projectPath: string, paneId: string) => void;
-  split: (projectPath: string, targetId: string, direction: SplitDirection) => void;
+  split: (projectPath: string, targetId: string, direction: SplitDirection, paneType?: PaneType) => void;
+  /** Get the pane type for a leaf node */
+  getPaneType: (projectPath: string, leafId: string) => PaneType;
   closePane: (projectPath: string, targetId: string) => void;
   setRatio: (projectPath: string, splitId: string, ratio: number) => void;
+  /** Toggle split direction (H↔V) of the parent split containing a leaf */
+  toggleDirection: (projectPath: string, leafId: string) => void;
   setPtySessionId: (paneId: string, sessionId: string) => void;
   markAiSession: (sessionId: string) => void;
   unmarkAiSession: (sessionId: string) => void;
@@ -53,7 +59,13 @@ function genId() {
 /** Create a default single-leaf tree */
 function createDefaultTree(): { tree: PaneNode; activeId: string } {
   const id = genId();
-  return { tree: { type: "leaf", id }, activeId: id };
+  return { tree: { type: "leaf", id, paneType: "terminal" }, activeId: id };
+}
+
+/** Find a leaf node's pane type by walking the tree */
+function findPaneType(node: PaneNode, leafId: string): PaneType | null {
+  if (node.type === "leaf") return node.id === leafId ? node.paneType ?? "terminal" : null;
+  return findPaneType(node.first, leafId) ?? findPaneType(node.second, leafId);
 }
 
 /** Find and replace a node in the tree */
@@ -71,6 +83,20 @@ function replaceNode(
     return { ...node, first, second };
   }
   return node;
+}
+
+/** Pick split direction based on pane dimensions: wider → horizontal, taller → vertical */
+export function autoDirection(width: number, height: number): SplitDirection {
+  return width >= height ? "horizontal" : "vertical";
+}
+
+/** Find the ID of the parent SplitNode that directly contains a given leaf */
+function findParentSplit(node: PaneNode, leafId: string, parentId: string | null = null): string | null {
+  if (node.type === "leaf") return node.id === leafId ? parentId : null;
+  return (
+    findParentSplit(node.first, leafId, node.id) ??
+    findParentSplit(node.second, leafId, node.id)
+  );
 }
 
 /** Collect all leaf IDs */
@@ -110,7 +136,14 @@ export const usePaneStore = create<PaneStore>((set, get) => ({
       activeIds: { ...s.activeIds, [projectPath]: paneId },
     })),
 
-  split: (projectPath, targetId, direction) =>
+  getPaneType: (projectPath, leafId) => {
+    const { trees } = get();
+    const tree = trees[projectPath];
+    if (!tree) return "terminal";
+    return findPaneType(tree, leafId) ?? "terminal";
+  },
+
+  split: (projectPath, targetId, direction, paneType = "terminal") =>
     set((s) => {
       const tree = s.trees[projectPath];
       if (!tree) return s;
@@ -122,7 +155,7 @@ export const usePaneStore = create<PaneStore>((set, get) => ({
         direction,
         ratio: 0.5,
         first: node,
-        second: { type: "leaf", id: newId },
+        second: { type: "leaf", id: newId, paneType },
       }));
       return {
         trees: { ...s.trees, [projectPath]: newRoot || tree },
@@ -162,6 +195,21 @@ export const usePaneStore = create<PaneStore>((set, get) => ({
       return {
         trees: { ...s.trees, [projectPath]: newRoot || tree },
       };
+    }),
+
+  toggleDirection: (projectPath, leafId) =>
+    set((s) => {
+      const tree = s.trees[projectPath];
+      if (!tree) return s;
+      const parentId = findParentSplit(tree, leafId);
+      if (!parentId) return s;
+      const newRoot = replaceNode(tree, parentId, (node) => {
+        if (node.type === "split") {
+          return { ...node, direction: node.direction === "horizontal" ? "vertical" : "horizontal" };
+        }
+        return node;
+      });
+      return { trees: { ...s.trees, [projectPath]: newRoot || tree } };
     }),
 
   setPtySessionId: (paneId, sessionId) =>

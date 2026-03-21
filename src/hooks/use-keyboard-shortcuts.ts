@@ -1,10 +1,12 @@
 import { useEffect } from "react";
 import { useAppStore } from "@/stores/app-store";
-import { usePaneStore } from "@/stores/pane-store";
+import { usePaneStore, autoDirection } from "@/stores/pane-store";
+import { getPaneRect } from "@/utils/pane-container-registry";
 import { useGitStore } from "@/stores/git-store";
 import { useEditorStore } from "@/stores/editor-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useSshStore } from "@/stores/ssh-store";
+import { useClaudeStore } from "@/stores/claude-store";
 
 /**
  * Global keyboard shortcut handler.
@@ -20,6 +22,7 @@ export function useKeyboardShortcuts() {
   const getActiveId = usePaneStore((s) => s.getActiveId);
   const split = usePaneStore((s) => s.split);
   const closePane = usePaneStore((s) => s.closePane);
+  const toggleDirection = usePaneStore((s) => s.toggleDirection);
 
   const gitCommit = useGitStore((s) => s.commit);
   const gitGetState = useGitStore((s) => s.getState);
@@ -97,8 +100,27 @@ export function useKeyboardShortcuts() {
           split(project, activeId, "vertical");
           return;
         }
+        // Ctrl+Shift+C: Split with Claude chat pane (auto direction)
+        if (isCtrl && e.shiftKey && e.key === "C") {
+          e.preventDefault();
+          const rect = getPaneRect(activeId);
+          const dir = rect ? autoDirection(rect.width, rect.height) : "horizontal";
+          split(project, activeId, dir, "claude");
+          return;
+        }
+        // Ctrl+Shift+T: Toggle split direction (H↔V)
+        if (isCtrl && e.shiftKey && e.key === "T") {
+          e.preventDefault();
+          toggleDirection(project, activeId);
+          return;
+        }
         if (isCtrl && e.key === "w") {
           e.preventDefault();
+          // Clean up Claude state if closing a Claude pane
+          const paneType = usePaneStore.getState().getPaneType(project, activeId);
+          if (paneType === "claude") {
+            useClaudeStore.getState().removePaneState(activeId);
+          }
           closePane(project, activeId);
           return;
         }
@@ -190,6 +212,6 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [view, activeTabPath, openTabs, setView, setActiveTab, split, closePane, getActiveId, gitCommit, gitGetState, gitStageFile, gitUnstageFile, editorGetState, editorCloseFile]);
+  }, [view, activeTabPath, openTabs, setView, setActiveTab, split, closePane, getActiveId, toggleDirection, gitCommit, gitGetState, gitStageFile, gitUnstageFile, editorGetState, editorCloseFile]);
   // Note: useSshStore.getState() is called imperatively inside handler — no dep needed
 }

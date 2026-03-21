@@ -1,9 +1,11 @@
 import { useRef, useLayoutEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { usePaneStore, collectLeafIds } from "@/stores/pane-store";
+import { registerPaneContainer, unregisterPaneContainer } from "@/utils/pane-container-registry";
 import type { PaneNode } from "@/stores/pane-store";
 import { SplitHandle } from "@/components/split-handle";
 import { TerminalPane } from "@/components/terminal-pane";
+import { ClaudeChatPane } from "@/components/claude-chat-pane";
 
 /**
  * Leaf slot — mounts a stable container element into the layout.
@@ -79,6 +81,7 @@ export function SplitPaneContainer({ projectPath }: SplitPaneContainerProps) {
   const tree = usePaneStore((s) => s.getTree(projectPath));
   const activeId = usePaneStore((s) => s.getActiveId(projectPath));
   const setActive = usePaneStore((s) => s.setActive);
+  const getPaneType = usePaneStore((s) => s.getPaneType);
 
   const leafIds = collectLeafIds(tree);
 
@@ -93,12 +96,14 @@ export function SplitPaneContainer({ projectPath }: SplitPaneContainerProps) {
       el.style.height = "100%";
       el.style.overflow = "hidden";
       containersRef.current.set(id, el);
+      registerPaneContainer(id, el);
     }
   }
 
   // Remove containers for closed panes
   for (const [id] of containersRef.current) {
     if (!leafIds.includes(id)) {
+      unregisterPaneContainer(id);
       containersRef.current.delete(id);
     }
   }
@@ -108,8 +113,10 @@ export function SplitPaneContainer({ projectPath }: SplitPaneContainerProps) {
       <TreeLayout node={tree} projectPath={projectPath} containers={containersRef.current} />
       {leafIds.map((id) => {
         const container = containersRef.current.get(id)!;
+        const paneType = getPaneType(projectPath, id);
+        const PaneComponent = paneType === "claude" ? ClaudeChatPane : TerminalPane;
         return createPortal(
-          <TerminalPane
+          <PaneComponent
             key={id}
             projectPath={projectPath}
             paneId={id}
