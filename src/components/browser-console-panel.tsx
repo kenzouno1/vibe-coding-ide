@@ -3,6 +3,7 @@ import { Trash2, ChevronDown, ChevronUp, ArrowRight, Send } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   useBrowserStore,
+  DEFAULT_BROWSER_STATE,
   type ConsoleLog,
   type ConsoleFilter,
 } from "@/stores/browser-store";
@@ -84,7 +85,7 @@ export const BrowserConsolePanel = memo(function BrowserConsolePanel({
   projectPath,
   onOpenFeedback,
 }: BrowserConsolePanelProps) {
-  const browserState = useBrowserStore((s) => s.getState(paneId));
+  const browserState = useBrowserStore((s) => s.states[paneId] ?? DEFAULT_BROWSER_STATE);
   const clearLogs = useBrowserStore((s) => s.clearLogs);
   const setConsoleFilter = useBrowserStore((s) => s.setConsoleFilter);
   const toggleConsolePanel = useBrowserStore((s) => s.toggleConsolePanel);

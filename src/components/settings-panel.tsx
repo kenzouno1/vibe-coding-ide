@@ -1,4 +1,6 @@
 import { useSettingsStore } from "@/stores/settings-store";
+import { usePluginStore } from "@/stores/plugin-store";
+import { getPlugins } from "@/plugins/plugin-registry";
 import { SettingsSection, SelectField, NumberField, ToggleField } from "@/components/settings-section";
 import { RotateCcw } from "lucide-react";
 
@@ -43,6 +45,9 @@ export function SettingsPanel() {
   const setLayout = useSettingsStore((s) => s.setLayout);
   const setBrowser = useSettingsStore((s) => s.setBrowser);
   const reset = useSettingsStore((s) => s.reset);
+  const enabledIds = usePluginStore((s) => s.enabledIds);
+  const togglePlugin = usePluginStore((s) => s.toggle);
+  const plugins = getPlugins();
 
   return (
     <div className="h-full overflow-y-auto bg-ctp-base">
@@ -158,6 +163,21 @@ export function SettingsPanel() {
             onChange={(v) => setBrowser({ consolePanelOpen: v })}
           />
         </SettingsSection>
+
+        {/* Plugins */}
+        {plugins.length > 0 && (
+          <SettingsSection title="Plugins">
+            {plugins.map((plugin) => (
+              <ToggleField
+                key={plugin.id}
+                label={plugin.name}
+                description={plugin.description}
+                checked={enabledIds.includes(plugin.id)}
+                onChange={() => togglePlugin(plugin.id)}
+              />
+            ))}
+          </SettingsSection>
+        )}
       </div>
     </div>
   );

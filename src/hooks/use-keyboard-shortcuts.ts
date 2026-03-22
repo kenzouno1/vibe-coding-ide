@@ -8,6 +8,8 @@ import { useProjectStore } from "@/stores/project-store";
 import { useSshStore } from "@/stores/ssh-store";
 import { useClaudeStore } from "@/stores/claude-store";
 import { useBrowserStore } from "@/stores/browser-store";
+import { usePluginStore } from "@/stores/plugin-store";
+import { getPlugins } from "@/plugins/plugin-registry";
 
 /**
  * Global keyboard shortcut handler.
@@ -62,10 +64,16 @@ export function useKeyboardShortcuts() {
         setView("editor");
         return;
       }
-      if (isCtrl && e.key === "4") {
-        e.preventDefault();
-        setView("ssh");
-        return;
+      // Plugin view-switch shortcuts (e.g. Ctrl+4 for SSH when enabled)
+      for (const plugin of getPlugins()) {
+        if (!usePluginStore.getState().isEnabled(plugin.id)) continue;
+        for (const sc of plugin.shortcuts ?? []) {
+          if (isCtrl === !!sc.ctrl && e.shiftKey === !!sc.shift && e.key === sc.key) {
+            e.preventDefault();
+            sc.action();
+            return;
+          }
+        }
       }
 
       // F5: refresh browser pane (not the app). Ctrl+F5: refresh the app.
@@ -164,8 +172,8 @@ export function useKeyboardShortcuts() {
         }
       }
 
-      // SSH terminal shortcuts (only in ssh view)
-      if (view === "ssh") {
+      // SSH terminal shortcuts (only in ssh view, when plugin enabled)
+      if (view === "ssh" && usePluginStore.getState().isEnabled("ssh")) {
         const sshStore = useSshStore.getState();
         const sshSessionId = sshStore.activeSessionId;
         if (sshSessionId) {

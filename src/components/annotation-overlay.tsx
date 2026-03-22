@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, memo } from "react";
 import { Stage, Layer, Line, Rect, Ellipse, Arrow, Text, Image as KonvaImage } from "react-konva";
 import { invoke } from "@tauri-apps/api/core";
-import { useBrowserStore, type AnnotationTool } from "@/stores/browser-store";
+import { useBrowserStore, DEFAULT_BROWSER_STATE, type AnnotationTool } from "@/stores/browser-store";
 import { AnnotationToolbar } from "@/components/annotation-toolbar";
 
 interface ShapeData {
@@ -26,7 +26,7 @@ export const AnnotationOverlay = memo(function AnnotationOverlay({
   paneId,
   projectPath,
 }: AnnotationOverlayProps) {
-  const browserState = useBrowserStore((s) => s.getState(paneId));
+  const browserState = useBrowserStore((s) => s.states[paneId] ?? DEFAULT_BROWSER_STATE);
   const closeAnnotation = useBrowserStore((s) => s.closeAnnotation);
 
   const stageRef = useRef<any>(null);

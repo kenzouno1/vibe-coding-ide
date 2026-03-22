@@ -3,7 +3,7 @@ import {
   Pencil, Highlighter, Square, Circle, ArrowRight,
   Type, MousePointer, Undo2, Redo2, X, Save, Copy,
 } from "lucide-react";
-import { useBrowserStore, type AnnotationTool } from "@/stores/browser-store";
+import { useBrowserStore, DEFAULT_BROWSER_STATE, type AnnotationTool } from "@/stores/browser-store";
 
 const TOOLS: { tool: AnnotationTool; icon: typeof Pencil; label: string }[] = [
   { tool: "select", icon: MousePointer, label: "Select" },
@@ -43,7 +43,7 @@ export const AnnotationToolbar = memo(function AnnotationToolbar({
   canUndo,
   canRedo,
 }: AnnotationToolbarProps) {
-  const browserState = useBrowserStore((s) => s.getState(paneId));
+  const browserState = useBrowserStore((s) => s.states[paneId] ?? DEFAULT_BROWSER_STATE);
   const setTool = useBrowserStore((s) => s.setAnnotationTool);
   const setColor = useBrowserStore((s) => s.setAnnotationColor);
   const setStrokeWidth = useBrowserStore((s) => s.setAnnotationStrokeWidth);

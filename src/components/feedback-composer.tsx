@@ -1,7 +1,7 @@
 import { useState, useCallback, memo } from "react";
 import { X, Send } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { useBrowserStore } from "@/stores/browser-store";
+import { useBrowserStore, DEFAULT_BROWSER_STATE } from "@/stores/browser-store";
 import { usePaneStore } from "@/stores/pane-store";
 
 interface FeedbackComposerProps {
@@ -17,7 +17,7 @@ export const FeedbackComposer = memo(function FeedbackComposer({
   screenshotPath,
   onClose,
 }: FeedbackComposerProps) {
-  const browserState = useBrowserStore((s) => s.getState(paneId));
+  const browserState = useBrowserStore((s) => s.states[paneId] ?? DEFAULT_BROWSER_STATE);
   const getActivePtySessionId = usePaneStore((s) => s.getActivePtySessionId);
   const getAiPtySessionId = usePaneStore((s) => s.getAiPtySessionId);
   const [notes, setNotes] = useState("");

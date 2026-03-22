@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "@/stores/app-store";
 import { useProjectStore } from "@/stores/project-store";
-import { useBrowserStore, type ConsoleLog } from "@/stores/browser-store";
+import { useBrowserStore, DEFAULT_BROWSER_STATE, type ConsoleLog } from "@/stores/browser-store";
 import { usePaneStore } from "@/stores/pane-store";
 import { BrowserUrlBar } from "@/components/browser-url-bar";
 import { BrowserConsolePanel } from "@/components/browser-console-panel";
@@ -35,7 +35,7 @@ export const BrowserPane = memo(function BrowserPane({
 
   const view = useAppStore((s) => s.view);
   const activeTabPath = useProjectStore((s) => s.activeTabPath);
-  const browserState = useBrowserStore((s) => s.getState(paneId));
+  const browserState = useBrowserStore((s) => s.states[paneId] ?? DEFAULT_BROWSER_STATE);
   const markWebviewCreated = useBrowserStore((s) => s.markWebviewCreated);
   const setUrl = useBrowserStore((s) => s.setUrl);
   const setLoading = useBrowserStore((s) => s.setLoading);

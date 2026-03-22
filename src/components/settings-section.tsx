@@ -55,14 +55,18 @@ export function NumberField({ label, value, min, max, step = 1, onChange }: Numb
 
 interface ToggleFieldProps {
   label: string;
+  description?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
 }
 
-export function ToggleField({ label, checked, onChange }: ToggleFieldProps) {
+export function ToggleField({ label, description, checked, onChange }: ToggleFieldProps) {
   return (
     <div className="flex items-center justify-between gap-4 py-1.5">
-      <label className="text-sm text-ctp-subtext1 shrink-0">{label}</label>
+      <div className="shrink-0">
+        <label className="text-sm text-ctp-subtext1">{label}</label>
+        {description && <p className="text-xs text-ctp-overlay0 mt-0.5">{description}</p>}
+      </div>
       <button
         role="switch"
         aria-checked={checked}

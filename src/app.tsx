@@ -1,8 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, Suspense } from "react";
+import "@/plugins/ssh-plugin";
 import { SplitPaneContainer } from "@/components/split-pane-container";
 import { GitPanel } from "@/components/git-panel";
 import { EditorView } from "@/components/editor-view";
-import { SshPanel } from "@/components/ssh-panel";
 import { SettingsPanel } from "@/components/settings-panel";
 import { Sidebar } from "@/components/sidebar";
 import { StatusBar } from "@/components/status-bar";
@@ -11,6 +11,8 @@ import { TitleBar } from "@/components/title-bar";
 import { useAppStore } from "@/stores/app-store";
 import { useGitStore } from "@/stores/git-store";
 import { useProjectStore } from "@/stores/project-store";
+import { usePluginStore } from "@/stores/plugin-store";
+import { getPlugins } from "@/plugins/plugin-registry";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useSessionPersistence } from "@/hooks/use-session-persistence";
 
@@ -23,6 +25,9 @@ export function App() {
   const activeTabPath = useProjectStore((s) => s.activeTabPath);
   const loadProjects = useProjectStore((s) => s.loadProjects);
   const gitRefresh = useGitStore((s) => s.refresh);
+  const enabledIds = usePluginStore((s) => s.enabledIds);
+
+  const enabledPlugins = getPlugins().filter((p) => enabledIds.includes(p.id));
 
   // Load projects on mount
   useEffect(() => {
@@ -85,16 +90,27 @@ export function App() {
               </div>
             );
           })}
-          {/* SSH view — connection-based, not per-project */}
-          <div
-            className="absolute inset-0"
-            style={{
-              visibility: view === "ssh" ? "visible" : "hidden",
-              zIndex: view === "ssh" ? 2 : 0,
-            }}
-          >
-            <SshPanel />
-          </div>
+          {/* Plugin views — global, not per-project */}
+          {enabledPlugins.map((plugin) => (
+            <div
+              key={plugin.id}
+              className="absolute inset-0"
+              style={{
+                visibility: view === plugin.viewId ? "visible" : "hidden",
+                zIndex: view === plugin.viewId ? 2 : 0,
+              }}
+            >
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center h-full text-ctp-overlay1">
+                    Loading...
+                  </div>
+                }
+              >
+                <plugin.ViewComponent />
+              </Suspense>
+            </div>
+          ))}
           {/* Settings view — global, not per-project */}
           <div
             className="absolute inset-0"

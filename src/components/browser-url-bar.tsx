@@ -1,14 +1,16 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { ArrowLeft, ArrowRight, RotateCw, Loader2, Camera, Pin, Maximize2, PanelTop } from "lucide-react";
+import { ArrowLeft, ArrowRight, RotateCw, Loader2, Camera, Pin, Maximize2, PanelTop, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { useBrowserStore } from "@/stores/browser-store";
+import { useBrowserStore, DEFAULT_BROWSER_STATE } from "@/stores/browser-store";
+import { usePaneStore, collectLeafIds } from "@/stores/pane-store";
+import { useProjectStore } from "@/stores/project-store";
 
 interface BrowserUrlBarProps {
   paneId: string;
 }
 
 export function BrowserUrlBar({ paneId }: BrowserUrlBarProps) {
-  const browserState = useBrowserStore((s) => s.getState(paneId));
+  const browserState = useBrowserStore((s) => s.states[paneId] ?? DEFAULT_BROWSER_STATE);
   const setUrl = useBrowserStore((s) => s.setUrl);
   const toggleFloatMode = useBrowserStore((s) => s.toggleFloatMode);
   const togglePinMode = useBrowserStore((s) => s.togglePinMode);
@@ -171,6 +173,23 @@ export function BrowserUrlBar({ paneId }: BrowserUrlBarProps) {
           {browserState.title}
         </span>
       )}
+
+      {/* Close browser pane */}
+      <button
+        onClick={() => {
+          const activeTabPath = useProjectStore.getState().activeTabPath;
+          if (!activeTabPath) return;
+          const tree = usePaneStore.getState().getTree(activeTabPath);
+          if (collectLeafIds(tree).length <= 1) return;
+          const { [paneId]: _, ...rest } = useBrowserStore.getState().states;
+          useBrowserStore.setState({ states: rest });
+          usePaneStore.getState().closePane(activeTabPath, paneId);
+        }}
+        title="Close browser pane (Ctrl+W)"
+        className="p-1.5 rounded hover:bg-ctp-surface0 text-ctp-overlay1 hover:text-ctp-red transition-colors"
+      >
+        <X size={16} />
+      </button>
     </div>
   );
 }
