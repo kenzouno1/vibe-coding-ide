@@ -2,16 +2,17 @@
 
 ## High-Level Overview
 
-DevTools is a Tauri v2 desktop application with a React/TypeScript frontend and Rust backend. It provides five main views (Terminal, Git, Editor, SSH) with integrated panes (Terminal, Claude Chat, Browser) in the terminal view, with per-project and per-pane isolated state.
+DevTools is a Tauri v2 desktop application with a React/TypeScript frontend and Rust backend. It provides core views (Terminal, Git, Editor, Settings) with optional plugin views (SSH is the first plugin), integrated panes (Terminal, Claude Chat, Browser) in the terminal view, and per-project and per-pane isolated state.
 
 ```
 ┌──────────────────────────────────────────────┐
 │      React Frontend (TypeScript)             │
-│  Views: Terminal|Git|Editor|SSH              │
-│  Sidebar (Ctrl+1/2/3/4)                      │
+│  Core Views: Terminal|Git|Editor|Settings    │
+│  Plugin Views: SSH (optional, user-enabled)  │
+│  Sidebar (Ctrl+1/2/3)                        │
 │  Panes: Terminal|Claude|Browser (Terminal)  │
 │  Zustand: App|Project|Pane|Git|Editor|Claude│
-│          |Browser|SSH                       │
+│          |Browser|SSH|Plugin                │
 └────────────────┬─────────────────────────────┘
                  │ IPC (Tauri) + WebSocket (Agent)
                  ↓
@@ -77,10 +78,11 @@ DevTools is a Tauri v2 desktop application with a React/TypeScript frontend and 
 
 #### AppStore
 ```typescript
-type AppView = "terminal" | "git" | "editor" | "ssh";
+type CoreView = "terminal" | "git" | "editor" | "settings";
+type AppView = CoreView | (string & {}); // Supports plugin view IDs
 interface: { view, setView }
 ```
-Global UI state only. Persisted to localStorage optionally. Browser moved to pane type.
+Global UI state only. AppView supports both core views and plugin view IDs (string type). Browser moved to pane type.
 
 #### ProjectStore
 ```typescript
@@ -186,6 +188,53 @@ interface: {
 type Message = { role, content, toolUse?: ToolBlock[] }
 ```
 Manages Claude chat per pane. NDJSON backend streaming, slash command dispatch, localStorage persistence.
+
+#### PluginStore
+```typescript
+interface: {
+  enabledIds: string[],  // List of enabled plugin IDs
+  isEnabled: (id: string) => boolean,
+  toggle: (id: string) => void,
+  enable: (id: string) => void,
+  disable: (id: string) => void
+}
+```
+Manages plugin enable/disable state (persisted to localStorage). When a plugin is disabled, app falls back to terminal view if currently viewing that plugin.
+
+### Plugin System Architecture
+
+#### Plugin Registry
+- **Location**: `src/plugins/plugin-registry.ts`
+- **Pattern**: Plugins register themselves at import time via `registerPlugin(descriptor)`
+- **Registry**: Global array of PluginDescriptor objects
+- **Functions**: `registerPlugin()`, `getPlugins()`, `getPlugin(id)`
+
+#### Plugin Descriptor Interface
+```typescript
+interface PluginDescriptor {
+  id: string,                          // Unique plugin ID
+  name: string,                        // Display name
+  description: string,                 // Short description
+  icon: LucideIcon,                    // Sidebar icon
+  viewId: string,                      // Unique view ID for routing
+  ViewComponent: LazyExoticComponent,  // Lazy-loaded React component
+  shortcuts?: PluginShortcut[],        // Optional keyboard shortcuts
+  sidebarOrder?: number                // Sidebar position (lower = higher)
+}
+```
+
+#### Plugin Example: SSH
+- **File**: `src/plugins/ssh-plugin.ts`
+- **View ID**: "ssh"
+- **Sidebar Order**: 40 (appears after core views)
+- **Shortcut**: Ctrl+4 to activate SSH view
+- **Component**: `SshPanel` (lazy-loaded)
+
+#### Plugin Integration Points
+1. **Sidebar**: Dynamically renders enabled plugin nav items below core views
+2. **Routing**: App.tsx renders plugin views via Suspense + React.lazy
+3. **Keyboard Shortcuts**: `use-keyboard-shortcuts.ts` dynamically registers plugin shortcuts
+4. **Settings**: "Plugins" panel in Settings view lists available plugins with enable/disable toggles
 
 ### Hooks
 

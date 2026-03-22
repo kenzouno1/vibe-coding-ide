@@ -11,6 +11,7 @@
   - `stores/` — Zustand state stores (app-store.ts, editor-store.ts)
   - `hooks/` — Custom React hooks (use-keyboard-shortcuts.ts, use-pty.ts)
   - `utils/` — Utility functions (language-detect.ts, file-icons.ts)
+  - `plugins/` — Plugin system (plugin-types.ts, plugin-registry.ts, ssh-plugin.ts)
 
 ### Rust Files (Backend)
 - **Location**: `src-tauri/src/` directory
@@ -110,7 +111,7 @@ const ClaudeStore: Record<paneId, {
 ## State Management Guidelines
 
 ### Store Responsibilities
-- **AppStore** — Global UI state only (current view: terminal/git/editor/ssh)
+- **AppStore** — Global UI state only (current view: core/plugin views)
 - **ProjectStore** — Open project tabs, active tab
 - **PaneStore** — Pane tree per project (terminal, claude, browser pane types)
 - **GitStore** — Git file state (staged/unstaged) per project
@@ -118,6 +119,7 @@ const ClaudeStore: Record<paneId, {
 - **BrowserStore** — Per-pane browser state (URL, loading, navigation)
 - **ClaudeStore** — Per-pane chat state (messages, streaming, session)
 - **SSHStore** — SSH connection state per project
+- **PluginStore** — Plugin enable/disable state (persisted to localStorage)
 
 ### Per-Project State
 Most stores use `Record<projectPath, State>` pattern:
