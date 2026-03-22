@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import { useSettingsStore } from "@/stores/settings-store";
 
 export interface ConsoleLog {
   level: "log" | "warn" | "error" | "info";
@@ -37,27 +38,30 @@ export interface BrowserState {
   floatHeight: number;
 }
 
-const DEFAULT_STATE: BrowserState = {
-  url: "about:blank",
-  isLoading: false,
-  canGoBack: false,
-  canGoForward: false,
-  title: "",
-  webviewCreated: false,
-  consoleLogs: [],
-  consoleFilter: "all",
-  consolePanelOpen: true,
-  annotationOpen: false,
-  screenshotData: null,
-  annotationTool: "pen",
-  annotationColor: "#f38ba8",
-  annotationStrokeWidth: 3,
-  layoutMode: "docked",
-  floatX: 100,
-  floatY: 100,
-  floatWidth: 480,
-  floatHeight: 360,
-};
+/** Build default browser state, reading consolePanelOpen from settings */
+function getDefaultState(): BrowserState {
+  return {
+    url: "about:blank",
+    isLoading: false,
+    canGoBack: false,
+    canGoForward: false,
+    title: "",
+    webviewCreated: false,
+    consoleLogs: [],
+    consoleFilter: "all",
+    consolePanelOpen: useSettingsStore.getState().browser.consolePanelOpen,
+    annotationOpen: false,
+    screenshotData: null,
+    annotationTool: "pen",
+    annotationColor: "#f38ba8",
+    annotationStrokeWidth: 3,
+    layoutMode: "docked",
+    floatX: 100,
+    floatY: 100,
+    floatWidth: 480,
+    floatHeight: 360,
+  };
+}
 
 interface BrowserStore {
   states: Record<string, BrowserState>;
@@ -94,14 +98,14 @@ function updateState(
 ): Record<string, BrowserState> {
   return {
     ...states,
-    [paneId]: { ...(states[paneId] ?? DEFAULT_STATE), ...patch },
+    [paneId]: { ...(states[paneId] ?? getDefaultState()), ...patch },
   };
 }
 
 export const useBrowserStore = create<BrowserStore>((set, get) => ({
   states: {},
 
-  getState: (paneId) => get().states[paneId] ?? DEFAULT_STATE,
+  getState: (paneId) => get().states[paneId] ?? getDefaultState(),
 
   setUrl: (paneId, url) =>
     set((s) => ({ states: updateState(s.states, paneId, { url }) })),
@@ -120,7 +124,7 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
 
   addLog: (paneId, log) =>
     set((s) => {
-      const current = s.states[paneId] ?? DEFAULT_STATE;
+      const current = s.states[paneId] ?? getDefaultState();
       const logs = current.consoleLogs.length >= MAX_CONSOLE_LOGS
         ? [...current.consoleLogs.slice(1), log]
         : [...current.consoleLogs, log];
@@ -135,7 +139,7 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
 
   toggleConsolePanel: (paneId) =>
     set((s) => {
-      const current = s.states[paneId] ?? DEFAULT_STATE;
+      const current = s.states[paneId] ?? getDefaultState();
       return { states: updateState(s.states, paneId, { consolePanelOpen: !current.consolePanelOpen }) };
     }),
 
@@ -156,7 +160,7 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
 
   toggleFloatMode: (paneId) =>
     set((s) => {
-      const current = s.states[paneId] ?? DEFAULT_STATE;
+      const current = s.states[paneId] ?? getDefaultState();
       return { states: updateState(s.states, paneId, {
         layoutMode: current.layoutMode === "float" ? "docked" : "float",
       }) };
@@ -164,7 +168,7 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
 
   togglePinMode: (paneId) =>
     set((s) => {
-      const current = s.states[paneId] ?? DEFAULT_STATE;
+      const current = s.states[paneId] ?? getDefaultState();
       return { states: updateState(s.states, paneId, {
         layoutMode: current.layoutMode === "pinned" ? "docked" : "pinned",
       }) };

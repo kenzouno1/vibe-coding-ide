@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback } from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
 import type { editor as monacoEditor, Uri } from "monaco-editor";
 import { useEditorStore } from "@/stores/editor-store";
+import { useSettingsStore } from "@/stores/settings-store";
 import { CATPPUCCIN_MOCHA_THEME } from "@/utils/monaco-catppuccin-theme";
 
 interface EditorPaneProps {
@@ -24,6 +25,7 @@ export function EditorPane({ projectPath }: EditorPaneProps) {
   const setDirty = useEditorStore((s) => s.setDirty);
   const saveFile = useEditorStore((s) => s.saveFile);
   const setCursorPosition = useEditorStore((s) => s.setCursorPosition);
+  const editorSettings = useSettingsStore((s) => s.editor);
 
   // Keep original content ref in sync with store
   useEffect(() => {
@@ -184,8 +186,9 @@ export function EditorPane({ projectPath }: EditorPaneProps) {
         theme="catppuccin-mocha"
         onMount={handleEditorDidMount}
         options={{
-          fontSize: 14,
-          minimap: { enabled: false },
+          fontSize: editorSettings.fontSize,
+          fontFamily: editorSettings.fontFamily || undefined,
+          minimap: { enabled: editorSettings.minimap },
           scrollBeyondLastLine: false,
           automaticLayout: true,
           padding: { top: 8 },
@@ -193,8 +196,8 @@ export function EditorPane({ projectPath }: EditorPaneProps) {
           cursorBlinking: "smooth",
           cursorSmoothCaretAnimation: "on",
           smoothScrolling: true,
-          tabSize: 2,
-          wordWrap: "off",
+          tabSize: editorSettings.tabSize,
+          wordWrap: editorSettings.wordWrap ? "on" : "off",
           bracketPairColorization: { enabled: true },
         }}
       />

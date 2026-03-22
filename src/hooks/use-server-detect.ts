@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useBrowserStore } from "@/stores/browser-store";
+import { useSettingsStore } from "@/stores/settings-store";
 
 interface PtyOutput {
   id: string;
@@ -21,6 +22,7 @@ export function useServerDetect(paneId: string) {
 
   useEffect(() => {
     const unlisten = listen<PtyOutput>("pty-output", (event) => {
+      if (!useSettingsStore.getState().browser.autoDetectServerUrls) return;
       const text = event.payload.data;
       const matches = text.matchAll(URL_REGEX);
       for (const match of matches) {

@@ -1,4 +1,5 @@
 import type { ITheme, ITerminalOptions } from "@xterm/xterm";
+import { useSettingsStore } from "@/stores/settings-store";
 
 export const CATPPUCCIN_THEME: ITheme = {
   background: "#1e1e2e",
@@ -25,9 +26,15 @@ export const CATPPUCCIN_THEME: ITheme = {
   brightWhite: "#a6adc8",
 };
 
-export const XTERM_OPTIONS: ITerminalOptions = {
-  theme: CATPPUCCIN_THEME,
-  fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace",
-  fontSize: 14,
-  cursorBlink: true,
-};
+/** Build xterm options from current settings store state */
+export function getXtermOptions(): ITerminalOptions {
+  const { terminal } = useSettingsStore.getState();
+  return {
+    theme: CATPPUCCIN_THEME,
+    fontFamily: terminal.fontFamily,
+    fontSize: terminal.fontSize,
+    cursorBlink: terminal.cursorBlink,
+    cursorStyle: terminal.cursorStyle,
+    scrollback: terminal.scrollback,
+  };
+}

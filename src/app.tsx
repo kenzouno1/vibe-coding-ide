@@ -3,6 +3,7 @@ import { SplitPaneContainer } from "@/components/split-pane-container";
 import { GitPanel } from "@/components/git-panel";
 import { EditorView } from "@/components/editor-view";
 import { SshPanel } from "@/components/ssh-panel";
+import { SettingsPanel } from "@/components/settings-panel";
 import { Sidebar } from "@/components/sidebar";
 import { StatusBar } from "@/components/status-bar";
 import { TabBar } from "@/components/tab-bar";
@@ -93,6 +94,16 @@ export function App() {
             }}
           >
             <SshPanel />
+          </div>
+          {/* Settings view — global, not per-project */}
+          <div
+            className="absolute inset-0"
+            style={{
+              visibility: view === "settings" ? "visible" : "hidden",
+              zIndex: view === "settings" ? 2 : 0,
+            }}
+          >
+            <SettingsPanel />
           </div>
         </div>
       </div>

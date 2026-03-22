@@ -39,6 +39,13 @@ export function useKeyboardShortcuts() {
       const project = activeTabPath;
       if (!project) return;
 
+      // Settings shortcut (Ctrl+,)
+      if (isCtrl && e.key === ",") {
+        e.preventDefault();
+        setView("settings");
+        return;
+      }
+
       // View switching
       if (isCtrl && e.key === "1") {
         e.preventDefault();

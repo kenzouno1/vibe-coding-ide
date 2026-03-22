@@ -1,4 +1,4 @@
-import { Terminal, GitBranch, Code, Monitor } from "lucide-react";
+import { Terminal, GitBranch, Code, Monitor, Settings } from "lucide-react";
 import { useAppStore, type AppView } from "@/stores/app-store";
 
 const NAV_ITEMS: { view: AppView; icon: typeof Terminal; label: string }[] = [
@@ -27,6 +27,19 @@ export function Sidebar() {
           <Icon size={18} />
         </button>
       ))}
+      <div className="mt-auto">
+        <button
+          onClick={() => setView("settings")}
+          title="Settings (Ctrl+,)"
+          className={`p-2.5 rounded-lg transition-colors ${
+            view === "settings"
+              ? "bg-ctp-surface0 text-ctp-mauve"
+              : "text-ctp-overlay1 hover:text-ctp-text hover:bg-ctp-surface0"
+          }`}
+        >
+          <Settings size={18} />
+        </button>
+      </div>
     </div>
   );
 }

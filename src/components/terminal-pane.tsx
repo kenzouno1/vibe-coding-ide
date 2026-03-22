@@ -6,8 +6,9 @@ import { usePty } from "@/hooks/use-pty";
 import { useAppStore } from "@/stores/app-store";
 import { useProjectStore } from "@/stores/project-store";
 import { usePaneStore } from "@/stores/pane-store";
+import { useSettingsStore } from "@/stores/settings-store";
 
-import { XTERM_OPTIONS } from "@/utils/xterm-config";
+import { getXtermOptions } from "@/utils/xterm-config";
 
 /** Handle paste: uses Rust to read clipboard (supports both text and file paths) */
 async function handlePaste(write: (data: string) => void) {
@@ -82,7 +83,7 @@ export const TerminalPane = memo(function TerminalPane({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const term = new Terminal(XTERM_OPTIONS);
+    const term = new Terminal(getXtermOptions());
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
@@ -177,6 +178,19 @@ export const TerminalPane = memo(function TerminalPane({
       term.dispose();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Apply terminal settings changes to existing terminal in real-time
+  const termSettings = useSettingsStore((s) => s.terminal);
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.fontFamily = termSettings.fontFamily;
+    term.options.fontSize = termSettings.fontSize;
+    term.options.cursorBlink = termSettings.cursorBlink;
+    term.options.cursorStyle = termSettings.cursorStyle;
+    term.options.scrollback = termSettings.scrollback;
+    fitAddonRef.current?.fit();
+  }, [termSettings]);
 
   // Re-fit when this tab becomes visible or switching to terminal view
   useEffect(() => {

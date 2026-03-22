@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { usePty } from "@/hooks/use-pty";
 import { useAppStore } from "@/stores/app-store";
-import { XTERM_OPTIONS } from "@/utils/xterm-config";
+import { getXtermOptions } from "@/utils/xterm-config";
 
 /**
  * Local terminal panel embedded in SSH view.
@@ -28,7 +28,7 @@ export const SshAgentTerminal = memo(function SshAgentTerminal() {
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const term = new Terminal(XTERM_OPTIONS);
+    const term = new Terminal(getXtermOptions());
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(containerRef.current);

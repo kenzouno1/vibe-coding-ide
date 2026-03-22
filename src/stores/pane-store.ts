@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useSettingsStore } from "@/stores/settings-store";
 
 export type SplitDirection = "horizontal" | "vertical";
 export type PaneType = "terminal" | "claude" | "browser";
@@ -58,19 +59,31 @@ function genId() {
   return `pane-${nextId++}`;
 }
 
-/** Create default tree: 1 terminal + 1 AI agent side by side */
+/** Create default tree based on user layout settings */
 function createDefaultTree(): { tree: PaneNode; activeId: string } {
+  const { layout } = useSettingsStore.getState();
   const terminalId = genId();
-  const claudeId = genId();
+
+  // Terminal-only: single leaf
+  if (layout.defaultPaneLayout === "terminal-only") {
+    return {
+      tree: { type: "leaf", id: terminalId, paneType: "terminal" },
+      activeId: terminalId,
+    };
+  }
+
+  // Split layout: terminal + claude or browser
+  const secondType: PaneType = layout.defaultPaneLayout === "terminal-browser" ? "browser" : "claude";
+  const secondId = genId();
   const splitId = genId();
   return {
     tree: {
       type: "split",
       id: splitId,
-      direction: "horizontal",
+      direction: layout.defaultSplitDirection,
       ratio: 0.5,
       first: { type: "leaf", id: terminalId, paneType: "terminal" },
-      second: { type: "leaf", id: claudeId, paneType: "claude" },
+      second: { type: "leaf", id: secondId, paneType: secondType },
     },
     activeId: terminalId,
   };
